@@ -1,0 +1,89 @@
+# =========================
+# Python / FastAPI
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.sqlite3
+*.db
+*.log
+
+# Virtual environments
+venv/
+.env
+.env.*
+.venv/
+pip-wheel-metadata/
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Byte-compiled
+*.so
+
+# =========================
+# Firebase
+# =========================
+# Firebase credentials & config
+firebase-debug.log
+.firebaserc
+.firebase/
+.firebase-project
+*.runtimeconfig.json
+
+# Firebase Emulator data
+firebase-data/
+
+# =========================
+# Supabase
+# =========================
+# Supabase config and local dev
+.supabase/
+supabase/config.toml
+supabase/.env
+supabase/.temp/
+
+# =========================
+# Sensitive Keys (JSON/ENV)
+# =========================
+*.env
+*.env.*
+*key.json
+*Key.json
+*credentials.json
+*Credentials.json
+
+# =========================
+# Node.js (if using Firebase functions or frontend)
+# =========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Build outputs
+.cache/
+.next/
+out/
+functions/lib/
+functions/node_modules/
+functions/dist/
+
+# =========================
+# IDEs / Editors
+# =========================
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# =========================
+# OS / Misc
+# =========================
+.DS_Store
+Thumbs.db
+
+.github/workflows/pinger.yml
