@@ -36,3 +36,18 @@ async def get_user_role_designation(role_id: str):
     designation = roles["designation"]
 
     return designation
+
+async def get_role_id_by_designation(designation: str):
+    roles_ref = db.collection("roles")
+    query = roles_ref.where(
+        filter=FieldFilter("designation", "==", designation)
+    )
+    results = query.stream()
+    role_doc = None
+    async for doc in results:
+        role_doc = doc
+        break
+
+    if role_doc:
+        return role_doc.id
+    return None
