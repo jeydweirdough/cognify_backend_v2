@@ -1,7 +1,8 @@
 from datetime import datetime
 from pydantic import BaseModel, Field, field_validator, model_validator
 from services.authentication_service import cvsu_email_verification, validate_password_rules
-from services.question_service import validate_assessment_total_items, validate_question
+from services.role_services import get_role_id_by_designation
+from services.question_service import validate_question
 from typing import Dict, List, Optional, Union
 from enum import Enum
 from enums import (
@@ -14,6 +15,11 @@ class TimestampSchema(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = None
     deleted_at: Optional[datetime] = None
+
+class VerificationSchema(BaseModel):
+    is_verified: bool = False
+    verified_at: Optional[datetime] = None
+    verified_by: Optional[str] = None
 
 # --- AUTHENTICATION (Kept mostly the same) ---
 class LoginSchema(TimestampSchema):
@@ -40,7 +46,7 @@ class LoginSchema(TimestampSchema):
 class SignUpSchema(LoginSchema):
     first_name: Optional[str]
     last_name: Optional[str]
-    role_id: UserRole = UserRole.STUDENT
+    role_id: str = Field(get_role_id_by_designation(UserRole.STUDENT))
 
 # --- CURATED TOS HIERARCHY ---
 
@@ -48,7 +54,6 @@ class CompetencySchema(TimestampSchema):
     """
     Represents the specific row in the TOS (e.g., '1.1 Cite major tenets...') [cite: 9]
     """
-    id: str
     code: str  # e.g., "1.1"
     description: str
     
@@ -64,7 +69,6 @@ class TopicSchema(TimestampSchema):
     Represents the grouping in TOS (e.g., '1. Theories of Personality') [cite: 9]
     Acts as the 'Module' container.
     """
-    id: str
     title: str
     weight_percentage: float
     competencies: List[CompetencySchema]
@@ -77,7 +81,6 @@ class SubjectSchema(TimestampSchema):
     """
     Represents the Board Subject (e.g., 'Advanced Theories of Personality') 
     """
-    id: str
     title: str
     pqf_level: int
     total_weight_percentage: float = 100.0
@@ -85,8 +88,7 @@ class SubjectSchema(TimestampSchema):
 
 # --- QUESTION BANK ---
 
-class QuestionSchema(TimestampSchema):
-    id: str
+class QuestionSchema(TimestampSchema, VerificationSchema):
     text: str = Field(..., description="The text of the question")
     type: QuestionType
     choices: Optional[List[str]]
@@ -115,15 +117,14 @@ class AssessmentBlueprintSchema(BaseModel):
     """
     subject_id: str
     target_topics: List[str] # List of Topic IDs to include
-    total_items: int = 100
+    total_items: int = 0
     
     # Distribution override (defaults to Board Standards)
-    easy_percentage: float = 0.30     # 30% [cite: 12]
-    moderate_percentage: float = 0.40 # 40% [cite: 9]
-    difficult_percentage: float = 0.30 # 30% [cite: 9]
+    easy_percentage: float = 0     # 30% [cite: 12]
+    moderate_percentage: float = 0 # 40% [cite: 9]
+    difficult_percentage: float = 0 # 30% [cite: 9]
 
-class AssessmentSchema(TimestampSchema):
-    id: str
+class AssessmentSchema(TimestampSchema, VerificationSchema):
     title: str
     type: AssessmentType
     subject_id: str
@@ -165,23 +166,23 @@ class StudentProgressReport(TimestampSchema):
     modules_completeness: int
     assessment_completeness: int
     overall_completeness: int
-    
-    # New: Detailed breakdown for 'Weakness Identification'
     weakest_competencies: List[str] 
 
-class StudentSchema(TimestampSchema):
+class StudentSchema(BaseModel):
     user_id: str
     personal_readiness: Optional[PersonalReadinessLevel] = None
     confident_subject: Optional[List[str]] = None
     timeliness: int
     progress_report: Optional[List[StudentProgressReport]] = None
     competency_performance: Optional[List[StudentCompetencyPerformance]] = None
+    recommended_study_modules: Optional[List[str]] = None
 
-class UserProfileBase(SignUpSchema):
+class UserProfileBase(SignUpSchema, VerificationSchema):
     profile_image: Optional[str] = None
     middle_name: Optional[str] = None
     username: Optional[str] = None
     student_info: Optional[StudentSchema] = None
+    is_registered: bool = False
 
     class Config:
         fields = {"password": {"exclude": True}}

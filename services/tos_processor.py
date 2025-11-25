@@ -1,67 +1,108 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, status
-from services.tos_processor import process_tos_document
-from services.crud_services import create, read_query # <--- Added read_query
+import json
+import google.generativeai as genai
+from groq import Groq
+from core.config import settings
 from database.models import SubjectSchema
 
-router = APIRouter(prefix="/curriculum", tags=["Curriculum Management"])
+# 1. Initialize Clients
+genai.configure(api_key=settings.GOOGLE_API_KEY)
+groq_client = Groq(api_key=settings.GROQ_API_KEY)
 
-@router.post("/upload-tos", response_model=SubjectSchema)
-async def upload_tos_file(file: UploadFile = File(...)):
+async def process_tos_document(file_content: bytes, filename: str) -> SubjectSchema:
     """
-    Uploads a TOS PDF.
-    - If Subject DOES NOT exist: Extracts data using AI -> Saves to DB.
-    - If Subject ALREADY exists: Returns the existing DB record (Ignores creation).
+    Main function called by the API Route.
     """
-    if file.content_type != "application/pdf":
-        raise HTTPException(status_code=400, detail="File must be a PDF")
+    # Phase 1: Vision Extraction (Gemini)
+    raw_json_data = await _extract_structure_with_gemini(file_content)
     
-    try:
-        # 1. Read file into memory
-        content = await file.read()
-        
-        # 2. Run the AI Pipeline (Gemini + Llama)
-        # This extracts the Title and Structure from the PDF
-        subject_data: SubjectSchema = await process_tos_document(content, file.filename)
-        
-        # ---------------------------------------------------------
-        # NEW: FALLBACK CHECKER (Duplicate Prevention)
-        # ---------------------------------------------------------
-        # Check if a subject with this EXACT Title already exists in Firestore
-        existing_subjects = await read_query(
-            collection_name="subjects", 
-            filters=[("title", "==", subject_data.title)],
-            limit=1
-        )
+    # Phase 2: Logic & Schema Mapping (Llama 3)
+    structured_data = await _map_to_schema_with_llama(raw_json_data)
+    
+    return structured_data
 
-        if existing_subjects:
-            # FALLBACK TRIGGERED: Subject exists.
-            # We return the existing database record instead of creating a new one.
-            print(f"Duplicate detected: '{subject_data.title}'. Skipping creation.")
-            
-            # Map the raw DB dict back to SubjectSchema for the response
-            existing_record = existing_subjects[0]["data"]
-            existing_record["id"] = existing_subjects[0]["id"] # Ensure ID is included
-            return existing_record
-        
-        # ---------------------------------------------------------
-        # END CHECKER
-        # ---------------------------------------------------------
+async def _extract_structure_with_gemini(content: bytes):
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    
+    prompt = """
+    You are a data extractor. Analyze this Table of Specifications (TOS) image/PDF.
+    Extract the hierarchy into this JSON format:
+    {
+        "subject_title": "string",
+        "pqf_level": "integer (6 or 7)",
+        "topics": [
+            {
+                "topic_title": "string",
+                "weight_percent": "float",
+                "competencies": [
+                    {
+                        "code": "string (e.g. 1.1)",
+                        "description": "string",
+                        "bloom_level": "string (e.g. Remembering)",
+                        "item_count": "integer"
+                    }
+                ]
+            }
+        ]
+    }
+    Return ONLY JSON.
+    """
+    
+    response = model.generate_content([
+        prompt,
+        {"mime_type": "application/pdf", "data": content}
+    ])
+    
+    # Clean the response string
+    clean_text = response.text.replace("```json", "").replace("```", "").strip()
+    return json.loads(clean_text)
 
-        # 3. If No Duplicate, Save to Firestore
-        saved_record = await create(
-            collection_name="subjects", 
-            model_data=subject_data.model_dump(),
-            doc_id=None # Auto-generate ID
-        )
-        
-        # Add the generated ID to the response
-        response_data = saved_record["data"]
-        response_data["id"] = saved_record["id"]
-        
-        return response_data
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-            detail=f"Processing Failed: {str(e)}"
-        )
+async def _map_to_schema_with_llama(raw_data: dict) -> SubjectSchema:
+    # We provide the exact Pydantic schema structure to Llama
+    prompt = f"""
+    You are a database admin. Convert this raw data into a specific database schema.
+    
+    RAW DATA:
+    {json.dumps(raw_data)}
+    
+    CONVERSION RULES:
+    1. Bloom's "Remembering/Understanding" -> Difficulty "Easy"
+    2. Bloom's "Applying/Analyzing" -> Difficulty "Moderate"
+    3. Bloom's "Evaluating/Creating" -> Difficulty "Difficult"
+    4. Ensure "pqf_level" is an integer.
+    
+    OUTPUT SCHEMA (JSON):
+    {{
+      "id": "auto_generated_id",
+      "title": "Subject Title",
+      "pqf_level": 6,
+      "total_weight_percentage": 100.0,
+      "topics": [
+        {{
+          "id": "auto_generated_topic_id",
+          "title": "Topic Name",
+          "weight_percentage": 20.0,
+          "competencies": [
+             {{
+                "id": "auto_generated_comp_id",
+                "code": "1.1",
+                "description": "text",
+                "target_bloom_level": "remembering", 
+                "target_difficulty": "Easy",
+                "allocated_items": 5
+             }}
+          ]
+        }}
+      ]
+    }}
+    """
+
+    completion = groq_client.chat.completions.create(
+        messages=[{"role": "user", "content": prompt}],
+        model="llama-3.1-8b-instant",
+        response_format={"type": "json_object"}
+    )
+    
+    result = json.loads(completion.choices[0].message.content)
+    
+    # Validate with your actual Pydantic model to ensure it fits the DB
+    return SubjectSchema(**result)
