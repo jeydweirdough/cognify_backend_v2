@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: str
     PORT: int = 8000
     FIREBASE_SERVICE_ACCOUNT_JSON: str
+    GOOGLE_API_KEY: str
+    GROQ_API_KEY: str
 
     class Config:
         env_file = ".env"
