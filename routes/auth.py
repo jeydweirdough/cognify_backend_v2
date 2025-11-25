@@ -1,8 +1,9 @@
 from fastapi import APIRouter, HTTPException, Request, status, Depends
 from fastapi.responses import JSONResponse
-from models.user import SignUpSchema, LoginSchema, UserProfileBase
+from database.models import SignUpSchema, LoginSchema, UserProfileBase
 from services.role_services import get_role_id_by_designation
 from firebase_admin import auth
+from core.firebase import db
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
