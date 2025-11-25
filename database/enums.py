@@ -38,9 +38,7 @@ class PersonalReadinessLevel(str, Enum):
     MODERATE = "3"
     HIGH = "4"
 
-class Timeliness(int, Enum):
-    MIN_30 = 30
-    MIN_1_HOUR = 60
-    MIN_2_HOURS = 120
-    MIN_4_HOURS = 240
-    FLEXIBLE = 0
+class DifficultyLevel(str, Enum):
+    EASY = "Easy"
+    MODERATE = "Moderate"
+    DIFFICULT = "Difficult"

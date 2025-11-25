@@ -1,16 +1,21 @@
 from datetime import datetime
 from pydantic import BaseModel, Field, field_validator, model_validator
 from services.authentication_service import cvsu_email_verification, validate_password_rules
-from services.role_services import get_role_id_by_designation
 from services.question_service import validate_assessment_total_items, validate_question
 from typing import Dict, List, Optional, Union
-from enums import UserRole, AssessmentType, QuestionType, ProgressStatus, BloomTaxonomy, PersonalReadinessLevel, Timeliness
+from enum import Enum
+from enums import (
+    UserRole, AssessmentType, QuestionType, ProgressStatus, 
+    BloomTaxonomy, PersonalReadinessLevel, DifficultyLevel
+)
 
+# --- BASE ---
 class TimestampSchema(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = None
     deleted_at: Optional[datetime] = None
 
+# --- AUTHENTICATION (Kept mostly the same) ---
 class LoginSchema(TimestampSchema):
     email: str
     password: str
@@ -37,97 +42,140 @@ class SignUpSchema(LoginSchema):
     last_name: Optional[str]
     role_id: UserRole = UserRole.STUDENT
 
-class SubjectSchema(TimestampSchema):
+# --- CURATED TOS HIERARCHY ---
+
+class CompetencySchema(TimestampSchema):
+    """
+    Represents the specific row in the TOS (e.g., '1.1 Cite major tenets...') [cite: 9]
+    """
+    id: str
+    code: str  # e.g., "1.1"
+    description: str
+    
+    # TOS Specifics
+    target_bloom_level: BloomTaxonomy # The primary cognitive level required
+    target_difficulty: DifficultyLevel # Easy, Moderate, Difficult
+    
+    # Derived from TOS columns for Item Analysis
+    allocated_items: int = 0  # e.g., "8" items [cite: 9]
+
+class TopicSchema(TimestampSchema):
+    """
+    Represents the grouping in TOS (e.g., '1. Theories of Personality') [cite: 9]
+    Acts as the 'Module' container.
+    """
     id: str
     title: str
+    weight_percentage: float
+    competencies: List[CompetencySchema]
+    
+    # Educational Content
+    lecture_content: Optional[str]
     image: Optional[str]
-    description: Optional[str]
 
-class TopicAndCompentencySchema(TimestampSchema):
-    topic: str
-    competency: str
-
-class ModuleSchema(TimestampSchema):
+class SubjectSchema(TimestampSchema):
+    """
+    Represents the Board Subject (e.g., 'Advanced Theories of Personality') 
+    """
+    id: str
     title: str
-    description: Optional[str]
-    subject_id: str
-    source: str
-    image: Optional[str]
-    topics_and_competencies: List[TopicAndCompentencySchema]
-    bloom_taxonomy: BloomTaxonomy
+    pqf_level: int
+    total_weight_percentage: float = 100.0
+    topics: List[TopicSchema]
+
+# --- QUESTION BANK ---
 
 class QuestionSchema(TimestampSchema):
+    id: str
     text: str = Field(..., description="The text of the question")
-    type: QuestionType = Field(..., description="Type of the question")
-    choices: Optional[List[str]] = Field(None, description="List of options if applicable")
-    correct_answers: Optional[Union[str, bool, List[str]]] = Field(
-        None, description="The correct answer(s) depending on question type"
-    )
-    module_basis: List[str] = Field(default_factory=list)
+    type: QuestionType
+    choices: Optional[List[str]]
+    correct_answers: Optional[Union[str, bool, List[str]]]
+    
+    # STRICT ALIGNMENT TO TOS
+    competency_id: str = Field(..., description="Links question to specific TOS competency")
+    bloom_taxonomy: BloomTaxonomy
+    difficulty_level: DifficultyLevel
 
     @model_validator(mode="after")
     def validate_all(cls, values):
         validate_question(
-            question_type=values.type.value,  # Assuming QuestionType is an Enum
-            taxonomy=values.bloom_taxonomy.value,  # Assuming BloomTaxonomy is an Enum
+            question_type=values.type.value,
+            taxonomy=values.bloom_taxonomy.value,
             choices=values.choices,
             answers=values.correct_answers
         )
         return values
 
+# --- ASSESSMENT GENERATION ---
+
+class AssessmentBlueprintSchema(BaseModel):
+    """
+    Defines the rules for generating a quiz/exam based on TOS weights.
+    """
+    subject_id: str
+    target_topics: List[str] # List of Topic IDs to include
+    total_items: int = 100
+    
+    # Distribution override (defaults to Board Standards)
+    easy_percentage: float = 0.30     # 30% [cite: 12]
+    moderate_percentage: float = 0.40 # 40% [cite: 9]
+    difficult_percentage: float = 0.30 # 30% [cite: 9]
+
 class AssessmentSchema(TimestampSchema):
+    id: str
+    title: str
     type: AssessmentType
-    subject_id: Optional[str] = None
-    title: Optional[str] = None
+    subject_id: str
+    
+    # The blueprint used to generate this assessment
+    blueprint: Optional[AssessmentBlueprintSchema] = None
+    
     questions: List[QuestionSchema]
-    total_items: Optional[int] = None
+    total_items: int
 
     @model_validator(mode="after")
     def validate_total_items(cls, values):
-        validate_assessment_total_items(values.questions, values.total_items)
+        if values.questions and values.total_items:
+             if len(values.questions) != values.total_items:
+                 raise ValueError("Question count does not match total_items")
         return values
 
+# --- STUDENT PROGRESS (Enhanced for Analytics) ---
+
 class ProgressSchema(TimestampSchema):
-    time_spent: float = Field(0.0, description="Time spent in minutes")
-    times_taken: int = Field(0, description="Number of times the module has been taken")
+    time_spent: float
+    times_taken: int
     completion: int
-    status: ProgressStatus = Field(ProgressStatus.IN_PROGRESS, description="Progress status of the module")
+    status: ProgressStatus
     
     @field_validator("completion")
     def validate_completion(cls, value: int) -> int:
         if not (0 <= value <= 100):
             raise ValueError("Completion must be between 0 and 100")
         return value
-    
-class CompletedModules(ProgressSchema):
-    module_id: str
-    student_id: str
 
-class CompletedAssessment(ProgressSchema):
-    assessment_id: str
-    student_id: str
-    overall_items: Optional[int] = None
-    score: Optional[int] = None
-    percentage: Optional[int] = None
+class StudentCompetencyPerformance(BaseModel):
+    """Tracks how well a student knows a specific TOS Competency"""
+    competency_id: str
+    mastery_percentage: float # derived from quiz answers linked to this competency
 
 class StudentProgressReport(TimestampSchema):
     subject_id: str
     modules_completeness: int
     assessment_completeness: int
     overall_completeness: int
-
-class NotificationsSchema(TimestampSchema):
-    title: str
-    message: str
-    is_read: bool = False
-    student_id: str
+    
+    # New: Detailed breakdown for 'Weakness Identification'
+    weakest_competencies: List[str] 
 
 class StudentSchema(TimestampSchema):
+    user_id: str
     personal_readiness: Optional[PersonalReadinessLevel] = None
     confident_subject: Optional[List[str]] = None
-    timeliness: Timeliness = Timeliness.FLEXIBLE
+    timeliness: int
     progress_report: Optional[List[StudentProgressReport]] = None
-    recommended_modules: Optional[List[str]] = None
+    competency_performance: Optional[List[StudentCompetencyPerformance]] = None
 
 class UserProfileBase(SignUpSchema):
     profile_image: Optional[str] = None
