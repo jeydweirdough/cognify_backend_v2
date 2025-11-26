@@ -183,6 +183,7 @@ class UserProfileBase(SignUpSchema, VerificationSchema):
     username: Optional[str] = None
     student_info: Optional[StudentSchema] = None
     is_registered: bool = False
+    profile_picture: Optional[str] = None
 
     class Config:
         fields = {"password": {"exclude": True}}
