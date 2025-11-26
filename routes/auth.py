@@ -1,13 +1,19 @@
 # routes/auth.py
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Body
 from firebase_admin import auth
+from pydantic import BaseModel
 from database.models import LoginSchema, SignUpSchema, UserProfileBase
 from services.crud_services import create, read_query
 from services.role_services import get_role_id_by_designation
-from utils.firebase_utils import firebase_login_with_email
+from utils.firebase_utils import firebase_login_with_email, refresh_firebase_token
+from core.security import verify_firebase_token
 from datetime import datetime
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+# Schema for Refresh Token Request
+class RefreshTokenSchema(BaseModel):
+    refresh_token: str
 
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
 async def signup(auth_data: SignUpSchema):
@@ -16,8 +22,7 @@ async def signup(auth_data: SignUpSchema):
     2. Creates Firebase Auth User.
     3. Creates Firestore User Profile.
     """
-    # 1. Check Whitelist (Logic from your provided files)
-    # Note: Ensure 'pre_registered_users' collection exists in Firestore
+    # 1. Check Whitelist
     whitelist_entry = await read_query("pre_registered_users", [("email", "==", auth_data.email)])
     
     if not whitelist_entry:
@@ -54,10 +59,8 @@ async def signup(auth_data: SignUpSchema):
             role_id=role_id,
             is_verified=True,
             is_registered=True,
-            # Do not save password to Firestore
         )
         
-        # Convert to dict and remove password if present in model
         data_dict = profile_data.model_dump(exclude={"password"})
         
         # Save to 'user_profiles' using UID as document ID
@@ -66,11 +69,11 @@ async def signup(auth_data: SignUpSchema):
         return {"message": "User created successfully", "uid": fb_user.uid}
 
     except Exception as e:
-        # Rollback: Delete the Auth user if DB save fails to prevent "ghost" accounts
+        # Rollback
         try:
             auth.delete_user(fb_user.uid)
         except:
-            pass # Critical error logging should happen here
+            pass
         raise HTTPException(status_code=500, detail=f"Profile creation failed: {str(e)}")
 
 
@@ -78,18 +81,14 @@ async def signup(auth_data: SignUpSchema):
 async def login(credentials: LoginSchema):
     """
     Exchanges Email/Password for a Firebase ID Token.
+    Frontend expects: { token, refresh_token, uid, message }
     """
     try:
-        # 1. Login via REST API
         auth_data = firebase_login_with_email(credentials.email, credentials.password)
-        
-        # 2. (Optional) Check Firestore profile status (e.g., is_deleted, is_active)
-        # This ensures disabled users in DB cannot access API even if they have a token
-        # profile = await read_one("user_profiles", auth_data["localId"])
         
         return {
             "message": "Login successful",
-            "token": auth_data["idToken"], # Send this as "Bearer <token>"
+            "token": auth_data["idToken"], 
             "refresh_token": auth_data["refreshToken"],
             "uid": auth_data["localId"]
         }
@@ -98,3 +97,37 @@ async def login(credentials: LoginSchema):
         raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/refresh")
+async def refresh_token(request: RefreshTokenSchema):
+    """
+    Called by frontend axios interceptor when 401 occurs.
+    Returns new access token and refresh token.
+    """
+    try:
+        new_tokens = refresh_firebase_token(request.refresh_token)
+        return {
+            "token": new_tokens["token"],
+            "refresh_token": new_tokens["refresh_token"]
+        }
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+
+@router.post("/logout")
+async def logout(current_user: dict = Depends(verify_firebase_token)):
+    """
+    Revokes the user's refresh tokens on Firebase to invalidate the session.
+    Requires a valid access token in the Authorization header.
+    """
+    try:
+        uid = current_user['uid']
+        auth.revoke_refresh_tokens(uid)
+        return {"message": "Logged out successfully"}
+    except Exception as e:
+        # Even if revocation fails, the frontend clears cookies, so we just log warning
+        print(f"Logout revocation failed: {e}")
+        return {"message": "Logged out locally"}

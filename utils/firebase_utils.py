@@ -42,3 +42,35 @@ def firebase_login_with_email(email: str, password: str):
         
     except requests.exceptions.RequestException as e:
         raise HTTPException(status_code=500, detail=f"Connection to Auth Provider failed: {str(e)}")
+
+def refresh_firebase_token(refresh_token: str):
+    """
+    Exchanges a valid Refresh Token for a new ID Token via Firebase REST API.
+    Required for the frontend axios interceptor.
+    """
+    if not settings.FIREBASE_API_KEY:
+        raise ValueError("FIREBASE_API_KEY is not set in .env")
+
+    url = f"https://securetoken.googleapis.com/v1/token?key={settings.FIREBASE_API_KEY}"
+    
+    payload = {
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token
+    }
+    
+    try:
+        response = requests.post(url, json=payload)
+        data = response.json()
+
+        if response.status_code != 200:
+            error_msg = data.get("error", {}).get("message", "Token refresh failed")
+            raise HTTPException(status_code=401, detail=error_msg)
+
+        return {
+            "token": data["id_token"],          # New ID Token
+            "refresh_token": data["refresh_token"], # New Refresh Token
+            "user_id": data["user_id"]
+        }
+
+    except requests.exceptions.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Connection to Auth Provider failed: {str(e)}")
