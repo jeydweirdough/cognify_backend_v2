@@ -1,10 +1,6 @@
-# routes/question_routes.py
-"""
-API Routes for Question Management
-Aligned to Philippine Psychometrician Board Exam Standards
-"""
+# routes/questions.py
 from fastapi import APIRouter, HTTPException, Depends, Query, status
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 from core.security import allowed_users
@@ -16,10 +12,9 @@ from services.question_service import (
     DIFFICULTY_TO_TAXONOMY,
     TYPE_TO_TAXONOMY
 )
-from pydantic import BaseModel, Field
 
-
-router = APIRouter(prefix="/questions", tags=["Questions"], dependencies=Depends(allowed_users(["faculty", "admin"])))
+# FIX: dependencies=[Depends(...)]
+router = APIRouter(prefix="/questions", tags=["Questions"], dependencies=[Depends(allowed_users(["faculty", "teacher", "admin"]))])
 
 # ===== ROUTES =====
 
@@ -90,14 +85,14 @@ async def create_question(
 
 @router.post(
     "/bulk",
-    response_model=Dict[str, any],
+    response_model=Dict[str, Any],
     status_code=status.HTTP_201_CREATED,
     summary="Bulk create questions",
     description="Create multiple questions and validate distribution"
 )
 async def bulk_create_questions(
     request: QuestionBulkCreateRequest
-) -> Dict[str, any]:
+) -> Dict[str, Any]:
     """
     Create multiple questions at once.
     Optionally validates board exam difficulty distribution.
@@ -438,11 +433,11 @@ async def get_competency_distribution(competency_id: str) -> DistributionAnalysi
 
 @router.get(
     "/validation-rules",
-    response_model=Dict[str, any],
+    response_model=Dict[str, Any],
     summary="Get validation rules",
     description="Get current validation rules for question types and taxonomies"
 )
-async def get_validation_rules() -> Dict[str, any]:
+async def get_validation_rules() -> Dict[str, Any]:
     """
     Return the current validation rules.
     Useful for frontend validation and documentation.
@@ -466,11 +461,11 @@ async def get_validation_rules() -> Dict[str, any]:
 
 @router.get(
     "/templates/{question_type}",
-    response_model=Dict[str, any],
+    response_model=Dict[str, Any],
     summary="Get question template",
     description="Get a template for creating questions of specific type"
 )
-async def get_question_template(question_type: QuestionType) -> Dict[str, any]:
+async def get_question_template(question_type: QuestionType) -> Dict[str, Any]:
     """
     Get a template with examples for creating questions.
     Helps maintain consistency with board exam standards.
@@ -538,11 +533,11 @@ async def get_question_template(question_type: QuestionType) -> Dict[str, any]:
 
 @router.post(
     "/validate",
-    response_model=Dict[str, any],
+    response_model=Dict[str, Any],
     summary="Validate question before creation",
     description="Dry-run validation without creating question"
 )
-async def validate_question_endpoint(request: QuestionCreateRequest) -> Dict[str, any]:
+async def validate_question_endpoint(request: QuestionCreateRequest) -> Dict[str, Any]:
     """
     Validate a question without creating it.
     Useful for frontend validation feedback.

@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Request, status, Depends
 from fastapi.responses import JSONResponse
 from database.models import SignUpSchema, LoginSchema, UserProfileBase
 from services.role_services import get_role_id_by_designation
+from services.crud_services import read_query # Added import
 from firebase_admin import auth
 from core.firebase import db
 
@@ -9,6 +10,16 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
 async def signup_page(auth_data: SignUpSchema):
+    # 0. WHITELIST CHECK
+    # Check if the email exists in 'pre_registered_users' collection
+    whitelist_entry = await read_query("pre_registered_users", [("email", "==", auth_data.email)])
+    
+    if not whitelist_entry:
+        raise HTTPException(
+            status_code=403, 
+            detail="Email is not pre-registered by Admin. Please contact your administrator."
+        )
+
     # 1. Create Firebase Auth user first
     try:
         fb_user = auth.create_user(
@@ -27,6 +38,8 @@ async def signup_page(auth_data: SignUpSchema):
             first_name=auth_data.first_name,
             last_name=auth_data.last_name,
             role_id=get_role_id_by_designation(auth_data.role),
+            is_verified=True, # Auto-verify since they are whitelisted
+            is_registered=True
         )
         
         await db.collection("user_profiles").document(fb_user.uid).set(profile_payload.dict(exclude={"password"}))

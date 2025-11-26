@@ -3,7 +3,7 @@
 Question validation service aligned to Philippine Psychometrician Board Exam Standards
 Based on PRC requirements and Professional Regulation Commission guidelines
 """
-from typing import List, Optional, Union, Set, Dict
+from typing import Any, List, Optional, Union, Set, Dict
 
 
 # ===== PSYCHOMETRICIAN BOARD EXAM TAXONOMY MAPPING =====
@@ -369,7 +369,7 @@ def validate_assessment_distribution(
     target_moderate: float = 40.0,
     target_difficult: float = 30.0,
     tolerance: float = 5.0
-) -> Dict[str, any]:
+) -> Dict[str, Any]:
     """
     Validate that assessment follows board exam difficulty distribution.
     Standard: 30% Easy, 40% Moderate, 30% Difficult
@@ -392,21 +392,18 @@ def validate_assessment_distribution(
     
     total = len(questions)
     
-    # Count questions by difficulty
     counts = {
         "Easy": sum(1 for q in questions if q.get("difficulty_level") == "Easy"),
         "Moderate": sum(1 for q in questions if q.get("difficulty_level") == "Moderate"),
         "Difficult": sum(1 for q in questions if q.get("difficulty_level") == "Difficult")
     }
     
-    # Calculate percentages
     actual = {
         "Easy": (counts["Easy"] / total) * 100,
         "Moderate": (counts["Moderate"] / total) * 100,
         "Difficult": (counts["Difficult"] / total) * 100
     }
     
-    # Check against targets
     deviations = {
         "Easy": abs(actual["Easy"] - target_easy),
         "Moderate": abs(actual["Moderate"] - target_moderate),
