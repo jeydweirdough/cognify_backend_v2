@@ -1,5 +1,5 @@
 from services.crud_services import read_one, update, read_query
-from services.inference_service import readiness_predictor
+from services.inference_service import readiness_classifier
 from database.models import PersonalReadinessLevel
 from fastapi import HTTPException
 
@@ -29,7 +29,7 @@ async def update_student_readiness(user_id: str):
     # 3. Run Inference (Lightweight ONNX)
     try:
         # Expected output: [1] or [2] or [3] or [4] corresponding to the Enum
-        prediction = readiness_predictor.predict(features)
+        prediction = readiness_classifier.predict(features)
         predicted_level_int = int(prediction[0][0]) # Assuming model returns shape (1,1)
         
         # Map int to Enum

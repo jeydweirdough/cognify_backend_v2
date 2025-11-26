@@ -3,7 +3,7 @@ from enum import Enum
 class UserRole(str, Enum):
     ADMIN = "admin"
     STUDENT = "student"
-    TEACHER = "teacher"
+    FACULTY = "faculty_member" # Updated from TEACHER
 
 class AssessmentType(str, Enum):
     PRE_ASSESSMENT = "pre-assessment"

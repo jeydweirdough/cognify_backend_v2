@@ -1,190 +1,100 @@
 # routes/auth.py
-from fastapi import APIRouter, HTTPException, Request, status, Depends
-from fastapi.responses import JSONResponse
-from database.models import SignUpSchema, LoginSchema, UserProfileBase
-from services.role_services import get_role_id_by_designation
-from services.crud_services import read_query, read_one, update
+from fastapi import APIRouter, HTTPException, status, Depends
 from firebase_admin import auth
-from core.firebase import db
+from database.models import LoginSchema, SignUpSchema, UserProfileBase
+from services.crud_services import create, read_query
+from services.role_services import get_role_id_by_designation
+from utils.firebase_utils import firebase_login_with_email
 from datetime import datetime
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
-async def signup_page(auth_data: SignUpSchema):
+async def signup(auth_data: SignUpSchema):
     """
-    Register a new user. Email must be pre-registered by admin.
+    1. Validates email is in pre-registered whitelist.
+    2. Creates Firebase Auth User.
+    3. Creates Firestore User Profile.
     """
-    # 0. WHITELIST CHECK
+    # 1. Check Whitelist (Logic from your provided files)
+    # Note: Ensure 'pre_registered_users' collection exists in Firestore
     whitelist_entry = await read_query("pre_registered_users", [("email", "==", auth_data.email)])
     
     if not whitelist_entry:
         raise HTTPException(
             status_code=403, 
-            detail="Email is not pre-registered by Admin. Please contact your administrator."
+            detail="Email is not pre-registered. Contact admin."
         )
+    
+    assigned_role_name = whitelist_entry[0]["data"].get("assigned_role", "student")
+    
+    # 2. Get Role ID
+    role_id = await get_role_id_by_designation(assigned_role_name)
+    if not role_id:
+        raise HTTPException(status_code=500, detail=f"Role configuration error: '{assigned_role_name}' not found.")
 
-    # Get the assigned role from whitelist
-    assigned_role = whitelist_entry[0]["data"].get("assigned_role")
-
-    # 1. Create Firebase Auth user
+    # 3. Create Firebase Auth User
     try:
         fb_user = auth.create_user(
-            email=auth_data.email, 
-            password=auth_data.password
+            email=auth_data.email,
+            password=auth_data.password,
+            display_name=f"{auth_data.first_name} {auth_data.last_name}"
         )
     except auth.EmailAlreadyExistsError:
-        raise HTTPException(status_code=400, detail=f"Account with email {auth_data.email} already exists.")
+        raise HTTPException(status_code=400, detail="Email already registered.")
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Auth creation failed: {str(e)}")
 
-    # 2. Create Firestore profile
+    # 4. Create Firestore Profile
     try:
-        profile_payload = UserProfileBase(
-            email=fb_user.email,
+        profile_data = UserProfileBase(
+            email=auth_data.email,
             first_name=auth_data.first_name,
             last_name=auth_data.last_name,
-            role_id=await get_role_id_by_designation(assigned_role),
-            is_verified=True,  # Auto-verify since whitelisted
+            role_id=role_id,
+            is_verified=True,
             is_registered=True,
-            password=""  # Don't store password
+            # Do not save password to Firestore
         )
         
-        await db.collection("user_profiles").document(fb_user.uid).set(
-            profile_payload.model_dump(exclude={"password"})
-        )
+        # Convert to dict and remove password if present in model
+        data_dict = profile_data.model_dump(exclude={"password"})
         
-        # Update whitelist entry to mark as registered
-        await update("pre_registered_users", whitelist_entry[0]["id"], {
-            "is_registered": True,
-            "registered_at": datetime.utcnow(),
-            "user_id": fb_user.uid
-        })
+        # Save to 'user_profiles' using UID as document ID
+        await create("user_profiles", data_dict, doc_id=fb_user.uid)
         
-        return {
-            "message": "Successfully created user", 
-            "uid": fb_user.uid, 
-            "email": fb_user.email,
-            "role": assigned_role
-        }
-    
+        return {"message": "User created successfully", "uid": fb_user.uid}
+
     except Exception as e:
-        # Rollback Firebase Auth user
+        # Rollback: Delete the Auth user if DB save fails to prevent "ghost" accounts
         try:
             auth.delete_user(fb_user.uid)
-        except Exception as rollback_e:
-            raise HTTPException(
-                status_code=500, 
-                detail=f"CRITICAL: Profile creation failed, AND auth user rollback failed. {rollback_e}"
-            )
-        raise HTTPException(status_code=400, detail=f"Failed to create profile: {e}")
+        except:
+            pass # Critical error logging should happen here
+        raise HTTPException(status_code=500, detail=f"Profile creation failed: {str(e)}")
 
 
 @router.post("/login")
 async def login(credentials: LoginSchema):
     """
-    Login endpoint. Returns custom token for Firebase authentication.
+    Exchanges Email/Password for a Firebase ID Token.
     """
     try:
-        # Verify user exists in Firebase Auth by email
-        user = auth.get_user_by_email(credentials.email)
+        # 1. Login via REST API
+        auth_data = firebase_login_with_email(credentials.email, credentials.password)
         
-        # Check if user profile exists and is verified
-        profile = await read_one("user_profiles", user.uid)
-        if not profile:
-            raise HTTPException(status_code=404, detail="User profile not found")
-        
-        if not profile.get("is_verified"):
-            raise HTTPException(status_code=403, detail="Account not verified by admin")
-        
-        # Create custom token
-        custom_token = auth.create_custom_token(user.uid)
-        
-        # Log login activity
-        await db.collection("login_logs").add({
-            "user_id": user.uid,
-            "email": credentials.email,
-            "timestamp": datetime.utcnow(),
-            "ip_address": None  # Add if needed
-        })
+        # 2. (Optional) Check Firestore profile status (e.g., is_deleted, is_active)
+        # This ensures disabled users in DB cannot access API even if they have a token
+        # profile = await read_one("user_profiles", auth_data["localId"])
         
         return {
             "message": "Login successful",
-            "custom_token": custom_token.decode('utf-8'),
-            "uid": user.uid,
-            "email": user.email,
-            "role_id": profile.get("role_id"),
-            "profile": profile
+            "token": auth_data["idToken"], # Send this as "Bearer <token>"
+            "refresh_token": auth_data["refreshToken"],
+            "uid": auth_data["localId"]
         }
         
-    except auth.UserNotFoundError:
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+    except HTTPException as e:
+        raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
-
-
-@router.post("/logout")
-async def logout(user_id: str):
-    """
-    Logout endpoint. Revokes refresh tokens.
-    """
-    try:
-        auth.revoke_refresh_tokens(user_id)
-        
-        # Log logout activity
-        await db.collection("logout_logs").add({
-            "user_id": user_id,
-            "timestamp": datetime.utcnow()
-        })
-        
-        return {"message": "Logout successful"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Logout failed: {str(e)}")
-
-
-@router.post("/forgot-password")
-async def forgot_password(email: str):
-    """
-    Send password reset email.
-    """
-    try:
-        # Verify email exists
-        user = auth.get_user_by_email(email)
-        
-        # Generate password reset link
-        link = auth.generate_password_reset_link(email)
-        
-        # TODO: Send email with link
-        # For now, return the link (in production, send via email service)
-        
-        return {
-            "message": "Password reset link sent to email",
-            "reset_link": link  # Remove in production
-        }
-        
-    except auth.UserNotFoundError:
-        # Don't reveal if email exists or not for security
-        return {"message": "If email exists, password reset link has been sent"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Password reset failed: {str(e)}")
-
-
-@router.post("/verify-token")
-async def verify_token(token: str):
-    """
-    Verify Firebase ID token.
-    """
-    try:
-        decoded_token = auth.verify_id_token(token)
-        user_id = decoded_token['uid']
-        
-        profile = await read_one("user_profiles", user_id)
-        
-        return {
-            "valid": True,
-            "uid": user_id,
-            "email": decoded_token.get('email'),
-            "profile": profile
-        }
-    except Exception as e:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+        raise HTTPException(status_code=500, detail=str(e))

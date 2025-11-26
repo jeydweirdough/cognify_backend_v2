@@ -166,7 +166,7 @@ async def bulk_create_questions(
     response_model=List[QuestionResponse],
     summary="Get questions with filters",
     description="Retrieve questions filtered by competency, taxonomy, difficulty, etc.",
-    dependencies=Depends(allowed_users(["student"]))
+    dependencies=[Depends(allowed_users(["student", "teacher", "admin"]))]
 )
 async def get_questions(
     competency_id: Optional[str] = Query(None, description="Filter by competency"),

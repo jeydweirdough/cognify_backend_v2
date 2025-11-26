@@ -1,77 +1,58 @@
-# main.py
 from fastapi import FastAPI
-from starlette.middleware.sessions import SessionMiddleware
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware  # <--- IMPORT THIS
 import uvicorn
-from core.config import settings
-import os
+from routes import auth, tos, modules, students, assessments, admin, analytics, questions
+from services.inference_service import check_models_health
 
-# Import all routers
-from routes import auth, tos, modules, student, assessments, admin, analytics, questions
-
+# Initialize App
 app = FastAPI(
-    title="Cognify Backend",
-    description="Backend for Cognify: AI-powered LMS with TOS Analysis and Student Readiness Prediction.",
-    version="0.1.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
+    title="Cognify API",
+    version="2.0",
+    description="Backend for Cognify Learning Management System"
 )
 
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=settings.SESSION_SECRET_KEY,
-)
+# ==========================================
+# ✅ FIX: ADD CORS MIDDLEWARE
+# ==========================================
+# This whitelist allows your frontend to talk to the backend
+origins = [
+    "http://localhost:5173",      # Default Vite/React port
+    "http://127.0.0.1:5173",      # Alternative localhost
+    "http://localhost:3000",      # Common React port (optional)
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS.split(","),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"]
+    allow_origins=origins,        # Allow these specific origins
+    allow_credentials=True,       # Allow cookies/auth headers (Crucial for auth!)
+    allow_methods=["*"],          # Allow all methods (GET, POST, PUT, DELETE)
+    allow_headers=["*"],          # Allow all headers
 )
+# ==========================================
 
-# Mount static files for local uploads
-os.makedirs("static/uploads", exist_ok=True)
-app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# Check ML Models on Startup
+@app.on_event("startup")
+async def startup_event():
+    health = check_models_health()
+    if health['all_loaded']:
+        print("✅ AI Models loaded successfully")
+    else:
+        print("⚠️ Some AI models failed to load. Check logs.")
+
+# Register Routers
+app.include_router(auth.router, tags=["Authentication"])
+app.include_router(tos.router, tags=["Table of Specifications"])
+app.include_router(modules.router, tags=["Learning Modules"])
+app.include_router(questions.router, tags=["Question Bank"])
+app.include_router(assessments.router, tags=["Assessments"])
+app.include_router(students.router, tags=["Student Progress"])
+app.include_router(analytics.router, tags=["Analytics"])
+app.include_router(admin.router, tags=["Admin Management"])
 @app.get("/")
-def root():
-    return {
-        "message": "Cognify API running 🚀",
-        "version": "0.1.0",
-        "environment": settings.ENVIRONMENT,
-        "features": [
-            "AI-Powered TOS Processing",
-            "Adaptive Learning Analytics",
-            "Student Performance Prediction",
-            "Automated Question Verification",
-            "Personalized Study Recommendations"
-        ]
-    }
-
-@app.get("/health")
-def health_check():
-    return {
-        "status": "healthy",
-        "database": "connected",
-        "ai_services": "operational"
-    }
-
-# Register Routes
-app.include_router(auth.router)
-app.include_router(tos.router)
-app.include_router(modules.router)
-app.include_router(student.router)
-app.include_router(assessments.router)
-app.include_router(admin.router)
-app.include_router(analytics.router)  # NEW
-app.include_router(questions.router)  # NEW
+async def root():
+    return {"message": "Cognify API v2 is running 🚀"}
 
 if __name__ == "__main__":
-    uvicorn.run(
-        "main:app", 
-        host="0.0.0.0", 
-        port=settings.PORT, 
-        reload=True
-    )
+    # Run with reload enabled for development
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

@@ -1,7 +1,5 @@
 from core.firebase import db
-from google.cloud.firestore_v1 import AsyncClient
-from google.cloud.firestore_v1.base_query import FieldFilter
-
+from typing import List, Tuple, Any, Dict
 
 # ============================
 # CREATE
@@ -10,77 +8,68 @@ async def create(collection_name: str, model_data: dict, doc_id: str = None):
     collection_ref = db.collection(collection_name)
     
     if doc_id:
-        # Create with custom ID
         doc_ref = collection_ref.document(doc_id)
-        await doc_ref.set(model_data)
+        doc_ref.set(model_data)
         return {"id": doc_id, "data": model_data}
     
-    # Auto-generate ID
     new_doc_ref = collection_ref.document()
-    await new_doc_ref.set(model_data)
+    new_doc_ref.set(model_data)
     return {"id": new_doc_ref.id, "data": model_data}
-
 
 # ============================
 # READ - SINGLE DOCUMENT
 # ============================
 async def read_one(collection_name: str, doc_id: str):
     doc_ref = db.collection(collection_name).document(doc_id)
-    doc = await doc_ref.get()
-
+    doc = doc_ref.get()
     if doc.exists:
         return doc.to_dict()
     return None
 
-
 # ============================
-# READ - QUERY WITH FILTER + LIMIT
+# READ - QUERY
 # ============================
 async def read_query(
     collection_name: str, 
-    filters: list[tuple] = None, 
+    filters: List[Tuple[str, str, Any]] = None, 
     limit: int = None
-):
+) -> List[Dict[str, Any]]:
     """
-    filters example:
-      [("role_id", "==", "teacher"), ("is_active", "==", True)]
-    
-    limit example:
-      2
+    Executes a Firestore query.
+    filters format: [("field", "operator", "value")]
     """
     collection_ref = db.collection(collection_name)
     query = collection_ref
 
-    # Apply filters
     if filters:
         for field, op, value in filters:
-            query = query.where(filter=FieldFilter(field, op, value))
+            query = query.where(field, op, value)
 
-    # Apply limit
     if limit:
         query = query.limit(limit)
 
-    results = await query.get()
+    # SYNC call (no await here)
+    # Firestore's .get() is blocking in the Admin SDK
+    results = query.get()
 
-    return [
-        {"id": doc.id, "data": doc.to_dict()}
-        for doc in results
-    ]
-
+    data = []
+    for doc in results:
+        data.append({"id": doc.id, "data": doc.to_dict()})
+    
+    return data
 
 # ============================
 # UPDATE
 # ============================
 async def update(collection_name: str, doc_id: str, update_data: dict):
     doc_ref = db.collection(collection_name).document(doc_id)
-    await doc_ref.update(update_data)
+    doc_ref.update(update_data)
     return {"id": doc_id, "updated": update_data}
-
 
 # ============================
 # DELETE
 # ============================
 async def delete(collection_name: str, doc_id: str):
     doc_ref = db.collection(collection_name).document(doc_id)
-    await doc_ref.delete()
+    doc_ref.delete()
     return {"deleted": doc_id}
