@@ -3,29 +3,24 @@ from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from core.config import settings
-from routes import auth, tos, questions, modules
+
+# Import all routers
+from routes import auth, tos, modules, student, assessments
 
 app = FastAPI(
     title="Cognify Backend",
-    description="Holds the backend transaction and process of database and AI for the cognify mobile application, also used in the admin side",
-    version="0.0.1",
+    description="Backend for Cognify: AI-powered LMS with TOS Analysis and Student Readiness Prediction.",
+    version="0.0.2",
     docs_url="/docs",
-    redoc_url="/redoc",
-    contact={
-        "dev": "Jade Atyla Madigal",
-        "github": "https://github.com/jeydweirdough",
-        "email": "jamadigal@gmail.com"
-    }
+    redoc_url="/redoc"
 )
 
 app.add_middleware(
-    # Session Middleware Setup
     SessionMiddleware,
-    settings.SESSION_SECRET_KEY,
+    secret_key=settings.SESSION_SECRET_KEY,
 )
 
 app.add_middleware(
-    # CORS Middleware Setup
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
@@ -37,14 +32,16 @@ app.add_middleware(
 def root():
     return {
         "message": "Cognify API running 🚀",
-        "version": "0.0.1",
-        "environment": "localhost",
+        "version": "0.0.2",
+        "environment": settings.ENVIRONMENT,
     }
 
+# Register Routes
 app.include_router(auth.router)
 app.include_router(tos.router)
-app.include_router(questions.router)
-app.include_router(modules.router)
+app.include_router(modules.router)      # Added (was missing)
+app.include_router(student.router)      # Added (AI Readiness)
+app.include_router(assessments.router)  # Added (Exam Generation)
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=settings.PORT, reload=True)
