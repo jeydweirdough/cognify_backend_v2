@@ -264,3 +264,114 @@ class DistributionAnalysis(BaseModel):
     by_taxonomy: Dict[str, int]
     by_type: Dict[str, int]
     board_exam_compliance: Dict[str, Any]
+
+class PreRegisteredUserSchema(BaseModel):
+    """
+    Whitelist table. Admins add emails here.
+    Users can only sign up if their email exists here.
+    """
+    email: str = Field(..., description="Must be a @cvsu.edu.ph email")
+    assigned_role: str  # UserRole enum value
+    added_by: str  # Admin ID
+    is_registered: bool = False  # NEW FIELD
+    registered_at: Optional[datetime] = None  # NEW FIELD
+    user_id: Optional[str] = None  # NEW FIELD
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: Optional[datetime] = None
+
+
+class AnnouncementSchema(BaseModel):
+    """
+    Announcements created by Admin or Faculty.
+    """
+    title: str
+    content: str
+    target_audience: List[str] = []  # List of role names
+    is_global: bool = False
+    author_id: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: Optional[datetime] = None
+    deleted_at: Optional[datetime] = None
+
+
+class StudySessionLog(BaseModel):
+    """
+    Logs a single study session to track behavior.
+    Enhanced with more tracking fields.
+    """
+    user_id: str
+    resource_id: str  # ID of the Module or Assessment
+    resource_type: str  # 'module' or 'assessment'
+    
+    start_time: datetime = Field(default_factory=datetime.utcnow)
+    end_time: Optional[datetime] = None
+    duration_seconds: float = 0.0
+    
+    # Behavioral Metrics
+    interruptions_count: int = 0  # How many times they tabbed out or paused
+    idle_time_seconds: float = 0.0  # Detected idle time
+    
+    completion_status: str = "in_progress"  # or "completed"
+    
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: Optional[datetime] = None
+
+
+class AssessmentSubmission(BaseModel):
+    """
+    Stores student's assessment submissions for analytics.
+    """
+    user_id: str
+    assessment_id: str
+    subject_id: str
+    
+    answers: List[Dict]  # [{"question_id": "q1", "answer": "A", "is_correct": True, "competency_id": "c1"}]
+    
+    score: float
+    total_items: int
+    time_taken_seconds: float
+    
+    submitted_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class StudentBehaviorProfile(BaseModel):
+    """
+    Aggregated metrics used for AI Adaptability.
+    Stored inside StudentSchema.
+    Enhanced with more fields.
+    """
+    average_session_length: float = 0.0  # in minutes
+    preferred_study_time: str = "Any"  # Morning, Afternoon, Evening, Night
+    interruption_frequency: str = "Medium"  # Low, Medium, High
+    learning_pace: str = "Standard"  # Fast, Standard, Slow
+    
+    # NEW FIELDS
+    reading_pattern: str = "continuous"  # continuous, chunked, quick_scanner
+    assessment_pace: str = "moderate"  # rushed, moderate, thorough
+    focus_level: str = "Medium"  # High, Medium, Low
+    last_updated: Optional[datetime] = None
+
+
+class NotificationSchema(BaseModel):
+    """
+    In-app notifications for users.
+    """
+    user_id: str
+    title: str
+    message: str
+    type: str  # announcement, verification, reminder, alert
+    is_read: bool = False
+    related_id: Optional[str] = None  # ID of related announcement, question, etc.
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class SystemLog(BaseModel):
+    """
+    System activity logs for admin monitoring.
+    """
+    action: str  # user_created, question_verified, assessment_submitted, etc.
+    actor_id: str
+    target_id: Optional[str] = None
+    details: Dict = {}
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
