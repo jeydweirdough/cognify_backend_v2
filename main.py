@@ -3,7 +3,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from core.config import settings
-from routes import auth, curriculum
+from routes import auth, tos, questions, modules
 
 app = FastAPI(
     title="Cognify Backend",
@@ -42,7 +42,9 @@ def root():
     }
 
 app.include_router(auth.router)
-app.include_router(curriculum.router)
+app.include_router(tos.router)
+app.include_router(questions.router)
+app.include_router(modules.router)
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=settings.PORT, reload=True)

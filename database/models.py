@@ -186,3 +186,69 @@ class UserProfileBase(SignUpSchema, VerificationSchema):
 
     class Config:
         fields = {"password": {"exclude": True}}
+    
+class QuestionCreateRequest(BaseModel):
+    """Request model for creating a new question"""
+    text: str = Field(..., description="The question text", min_length=10)
+    type: QuestionType
+    choices: Optional[List[str]] = Field(None, description="Answer choices for MCQ")
+    correct_answers: Optional[str | bool | List[str]] = Field(..., description="Correct answer(s)")
+    
+    # TOS Alignment - REQUIRED
+    competency_id: str = Field(..., description="Must link to specific TOS competency")
+    bloom_taxonomy: BloomTaxonomy
+    difficulty_level: DifficultyLevel
+    
+    # Optional metadata
+    rationale: Optional[str] = Field(None, description="Explanation for correct answer")
+    references: Optional[List[str]] = Field(None, description="Source references")
+    tags: Optional[List[str]] = Field(None, description="Topic tags for filtering")
+
+
+class QuestionUpdateRequest(BaseModel):
+    """Request model for updating existing question"""
+    text: Optional[str] = Field(None, min_length=10)
+    choices: Optional[List[str]] = None
+    correct_answers: Optional[str | bool | List[str]] = None
+    bloom_taxonomy: Optional[BloomTaxonomy] = None
+    difficulty_level: Optional[DifficultyLevel] = None
+    rationale: Optional[str] = None
+    references: Optional[List[str]] = None
+    tags: Optional[List[str]] = None
+
+
+class QuestionBulkCreateRequest(BaseModel):
+    """Request model for bulk question creation"""
+    questions: List[QuestionCreateRequest]
+    validate_distribution: bool = Field(
+        True, 
+        description="Validate board exam difficulty distribution"
+    )
+
+
+class QuestionResponse(QuestionSchema):
+    """Response model with additional metadata"""
+    id: str
+    created_by: Optional[str] = None
+    question_number: Optional[int] = None
+
+
+class QuestionFilterParams(BaseModel):
+    """Parameters for filtering questions"""
+    competency_id: Optional[str] = None
+    bloom_taxonomy: Optional[BloomTaxonomy] = None
+    difficulty_level: Optional[DifficultyLevel] = None
+    question_type: Optional[QuestionType] = None
+    is_verified: Optional[bool] = None
+    tags: Optional[List[str]] = None
+
+
+class DistributionAnalysis(BaseModel):
+    """Response model for question distribution analysis"""
+    total_questions: int
+    by_difficulty: Dict[str, int]
+    by_taxonomy: Dict[str, int]
+    by_type: Dict[str, int]
+    board_exam_compliance: Dict[str, any]
+
+# create routes and services for all models above

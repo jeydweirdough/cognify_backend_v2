@@ -1,10 +1,11 @@
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from services.module_matcher import auto_categorize_module
 from services.crud_services import update, read_one
+from core.security import allowed_users
 # Note: You need a helper to upload to Firebase Storage. 
 # For this example, we'll simulate the URL generation.
 
-router = APIRouter(prefix="/modules", tags=["Module Management"])
+router = APIRouter(prefix="/modules", tags=["Module Management"], dependencies=Depends(allowed_users(["faculty"])))
 
 @router.post("/upload-smart", summary="Upload Module with AI Auto-Categorization")
 async def upload_module_smart(

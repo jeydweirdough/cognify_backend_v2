@@ -1,10 +1,11 @@
 # routes/curriculum.py
-from fastapi import APIRouter, UploadFile, File, HTTPException, status
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status
+from core.security import allowed_users
 from services.tos_processor import process_tos_document
 from services.crud_services import create
 from database.models import SubjectSchema
 
-router = APIRouter(prefix="/curriculum", tags=["Curriculum Management"])
+router = APIRouter(prefix="/tos", tags=["Curriculum Management"], dependencies=Depends(allowed_users(["admin"])))
 
 @router.post("/upload-tos", response_model=SubjectSchema)
 async def upload_tos_file(file: UploadFile = File(...)):
