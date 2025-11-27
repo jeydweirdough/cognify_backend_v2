@@ -7,7 +7,7 @@ from fastapi import HTTPException, status
 from services.crud_services import read_one, read_query, update, create, delete
 from services.role_service import get_user_role_designation
 from datetime import datetime
-
+import uuid
 
 async def get_all_subjects(
     requester_role: str,
@@ -422,4 +422,54 @@ async def get_subject_statistics(subject_id: str) -> Dict[str, Any]:
             "total_submissions": len(submissions),
             "average_score": round(avg_score, 2)
         }
+    }
+    
+# --- NEW FUNCTION ---
+async def create_subject(
+    subject_data: Dict[str, Any],
+    requester_id: str,
+    requester_role: str,
+    is_personal: bool
+):
+    subject_id = str(uuid.uuid4())
+    now = datetime.utcnow()
+
+    subject_payload = {
+        "id": subject_id,
+        "title": subject_data.get("title"),
+        "description": subject_data.get("description", None),
+        "pqf_level": subject_data.get("pqf_level", None),
+        "topics": [],
+        "created_at": now,
+        "updated_at": now,
+        "created_by": requester_id,
+        "personal": is_personal,
+    }
+
+    # ===============================
+    # STUDENT → PERSONAL SUBJECT
+    # ===============================
+    if is_personal:
+        await create(
+            f"students/{requester_id}/subjects",
+            subject_payload,
+            doc_id=subject_id
+        )
+        
+        return {
+            "message": "Personal subject created successfully",
+            "subject_id": subject_id,
+            "owner": requester_id,
+            "location": f"students/{requester_id}/subjects"
+        }
+
+    # ===============================
+    # FACULTY / ADMIN → GLOBAL SUBJECT
+    # ===============================
+    await create("subjects", subject_payload, doc_id=subject_id)
+
+    return {
+        "message": "Subject created successfully",
+        "subject_id": subject_id,
+        "location": "subjects"
     }

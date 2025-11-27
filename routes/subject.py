@@ -7,13 +7,14 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 from core.security import verify_firebase_token
-from database.models import CompetencyUpdateRequest, SubjectUpdateRequest, TopicCreateRequest, TopicUpdateRequest
+from database.models import CompetencyUpdateRequest, SubjectUpdateRequest, TopicCreateRequest, TopicUpdateRequest, SubjectCreateRequest
 from services.subject_service import (
     get_all_subjects,
     get_subject_by_id,
     get_subject_topics,
     get_topic_competencies,
     update_subject,
+    create_subject,
     update_topic,
     update_competency,
     add_topic_to_subject,
@@ -141,6 +142,33 @@ async def get_statistics(
     
     return statistics
 
+# ========================================
+# CREATE SUBJECTS <--- NEW SECTION
+# ========================================
+@router.post("/", summary="Create a new subject", status_code=status.HTTP_201_CREATED)
+async def create_new_subject(
+    subject_data: SubjectCreateRequest,
+    current_user: dict = Depends(verify_firebase_token)
+):
+    """
+    Creates a new subject.
+    - All roles can create subjects.
+    - If the role is 'student', the subject is treated as personal (stored differently).
+    """
+    user_id, role = await get_user_profile_with_role(current_user["uid"])
+    
+    # Faculty and Admin create "official" subjects. Student creates "personal" subjects.
+    is_personal = role == "student"
+    
+    # Pass subject data, user ID, and role to the service
+    result = await create_subject(
+        subject_data=subject_data.model_dump(), 
+        requester_id=user_id, 
+        requester_role=role,
+        is_personal=is_personal
+    )
+    
+    return result
 
 # ========================================
 # UPDATE SUBJECTS

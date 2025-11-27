@@ -36,10 +36,14 @@ app = FastAPI(
 # ==========================================
 origins = [
     "http://localhost:8081",
-    "http://localhost:5173",      # Default Vite/React port
-    "http://127.0.0.1:5173",      # Alternative localhost
-    "http://127.0.0.1:5175",
-    "http://localhost:3000",      # Common React port (optional)
+    "http://127.0.0.1:8081",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://10.0.2.2:8081",   # Android emulator
+    "http://10.0.2.2",        # Android
+    "http://192.168.0.0/16",  # local network (Expo Go)
+    "*",  # last fallback (optional but recommended during dev)
 ]
 
 app.add_middleware(

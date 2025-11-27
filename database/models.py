@@ -386,6 +386,15 @@ class SystemLog(BaseModel):
 # REQUEST MODELS
 # ========================================
 
+class SubjectCreateRequest(BaseModel):
+    """
+    Request model for creating a new subject.
+    Only title and description are required for simplicity/student-personal subjects.
+    """
+    title: str = Field(..., description="The title of the subject")
+    description: Optional[str] = Field(None, description="Optional description")
+    
+
 class SubjectUpdateRequest(BaseModel):
     title: Optional[str] = None
     pqf_level: Optional[int] = None
