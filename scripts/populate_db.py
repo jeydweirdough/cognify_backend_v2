@@ -41,27 +41,27 @@ ROLE_DESIGNATIONS = {
 SUBJECT_DATA = [
     {
         "title": "Developmental Psychology",
-        "description": "Study of human growth and development across the lifespan.",
+        "description": "Study of human growth and changes from childhood to adulthood.",
         "pqf_level": 6,
-        "topics": ["Nature vs Nurture", "Research Methods", "Dev Theories", "Lifespan Issues"]
+        "topics": ["Perspective on Nature and Nurture", "Research Methods in Developmental Psychology & Ethical Considerations", "Developmental Theories", "Developmental Principles", "Developmental Issues", "Developmental Challenges and Milestones on Developmental Stages"]
     },
     {
         "title": "Abnormal Psychology",
-        "description": "Manifestations of behavior and psychological disorders.",
+        "description": "Study of psychological disorders, their causes, and treatments.",
         "pqf_level": 6,
-        "topics": ["Anxiety Disorders", "Mood Disorders", "Personality Disorders", "Interventions"]
+        "topics": ["Manifestations of Behavior", " Psychological Disorders and Specific Symptoms based on DSM-5", "Personality Disorders", "Theoritical Approaches in Explaining the Etiology of Psychological Disorders", "Therapeutic Intervention of Psychological Disorders", "Socio-Cultural Factors & Ethical Principles in Diagnosing Abnormal Behavior", "Global Health Crisis & Mental Health Law"]
     },
     {
         "title": "Psychological Assessment",
-        "description": "Psychometric properties, test construction, and usage.",
+        "description": "Understanding and using psychological tests to measure behavior and mental processes.",
         "pqf_level": 6,
-        "topics": ["Psychometrics", "Test Construction", "Validity & Reliability", "Ethics"]
+        "topics": ["Psychometric Properties & Principles", "Research Methods & Statistics", "Validity & Reliability", "Selection of Assessment Methods & Tools", "Test Administration & Scoring", "Ethical Principles & Standards of Practice"]
     },
     {
         "title": "Industrial-Organizational Psychology",
-        "description": "Workplace behavior, organizational theory, and HR.",
+        "description": "Application of psychology to workplace behavior and performance.",
         "pqf_level": 6,
-        "topics": ["Org Theory", "HR Management", "Team Dynamics", "Leadership"]
+        "topics": ["Organization Theory", "Human Resource Management", "Team Dynamics", "Organizational Change & Development"]
     }
 ]
 
@@ -144,7 +144,7 @@ async def generate_subjects():
             "total_weight_percentage": 100.0,
             "topics": topics,
             "created_at": get_utc_now(),
-            "description": f"{TEST_PREFIX} {sub_info['description']}"
+            "description": sub_info["description"]
         }
         
         res = await create("subjects", subject_data)
