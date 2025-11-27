@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager  # <--- Import this
 import uvicorn
-from routes import auth, tos, modules, students, assessments, admin, analytics, questions, profiles
+from routes import auth, tos, modules, students, assessments, admin, analytics, questions, profiles, subject
 from services.inference_service import check_models_health
 
 # ==========================================
@@ -60,6 +60,7 @@ app.include_router(students.router, tags=["Student Progress"])
 app.include_router(analytics.router, tags=["Analytics"])
 app.include_router(admin.router, tags=["Admin Management"])
 app.include_router(profiles.router, tags=["Profile"])
+app.include_router(subject.router, tags=["Subjects & Curriculum"]) # <-- ADD THIS LINE!
 
 @app.get("/")
 async def root():

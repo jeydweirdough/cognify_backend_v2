@@ -34,17 +34,14 @@ async def get_all_subjects(
         subject_info = {
             "id": subj["id"],
             "title": data.get("title"),
+            "description": data.get("description"),
             "pqf_level": data.get("pqf_level"),
             "total_weight_percentage": data.get("total_weight_percentage"),
             "topics_count": len(data.get("topics", [])),
             "created_at": data.get("created_at")
         }
         
-        # Include full details for faculty and admin
-        if requester_role in ["faculty_member", "admin"]:
-            subject_info["topics"] = data.get("topics", [])
-            subject_info["description"] = data.get("description")
-        
+     
         result.append(subject_info)
     
     return result
