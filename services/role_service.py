@@ -31,13 +31,7 @@ async def get_user_role_id(uid: str):
     if not role_id:
         raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="User role not assigned")
 
-    role_doc = db.collection("roles").document(role_id).get()
-    if not role_doc.exists:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Role designation missing")
-
-    designation = role_doc.to_dict().get("designation")
-
-    return designation.lower()
+    return role_id
 
 async def get_user_role_designation(role_id: str):
     role_doc = db.collection("roles").document(role_id).get()

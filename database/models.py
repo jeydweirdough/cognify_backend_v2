@@ -1,7 +1,7 @@
 from datetime import datetime
 from pydantic import BaseModel, Field, field_validator, model_validator
 from services.authentication_service import cvsu_email_verification, validate_password_rules
-from services.role_services import get_role_id_by_designation
+from services.role_service import get_role_id_by_designation
 from services.question_service import validate_question
 from typing import Dict, List, Optional, Union, Any
 from enum import Enum

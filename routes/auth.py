@@ -4,7 +4,7 @@ from firebase_admin import auth
 from pydantic import BaseModel
 from database.models import LoginSchema, SignUpSchema, UserProfileBase
 from services.crud_services import create, read_query
-from services.role_services import get_role_id_by_designation
+from services.role_service import get_role_id_by_designation
 from utils.firebase_utils import firebase_login_with_email, refresh_firebase_token
 from core.security import verify_firebase_token
 from datetime import datetime

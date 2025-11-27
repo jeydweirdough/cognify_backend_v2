@@ -2,7 +2,7 @@ from fastapi import Request, HTTPException, status, Header
 from typing import List
 from firebase_admin import auth
 from core.firebase import db
-from services.role_services import decode_user, get_user_role_id, get_user_role_designation
+from services.role_service import decode_user, get_user_role_id, get_user_role_designation
 
 def verify_firebase_token(request: Request):
     auth_headers = request.headers.get("authorization")
@@ -23,6 +23,11 @@ def allowed_users(allowed_roles: List[str]):
         user = await decode_user(token)
         role_id = await get_user_role_id(user["uid"])
         designation = await get_user_role_designation(role_id)
+
+        print("Token: ", token)
+        print("User: ", user)
+        print("Role ID: ", role_id)
+        print("Designation and Allowed Roles: ", designation, allowed_roles)  # Debugging line
 
         if designation not in [role.lower() for role in allowed_roles]:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
