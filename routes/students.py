@@ -7,17 +7,19 @@ from services.adaptability_service import (
     get_adaptive_content
 )
 from services.crud_services import read_one, create, update, read_query
+from services.profile_service import get_user_profile_with_role
 from core.security import allowed_users
 from database.models import StudySessionLog, AnnouncementSchema
 from datetime import datetime
 from typing import List
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/student", tags=["Student Analytics"])
 
 @router.get("/profile/{user_id}")
 async def get_student_profile(
     user_id: str, 
-    current_user: dict = Depends(allowed_users(["student", "teacher", "admin"]))
+    current_user: dict = Depends(allowed_users(["student", "faculty_member", "admin"]))
 ):
     """
     Fetches the full student profile including AI-generated insights.
@@ -35,7 +37,7 @@ async def get_student_profile(
 @router.post("/analyze-readiness/{user_id}")
 async def analyze_readiness(
     user_id: str, 
-    current_user: dict = Depends(allowed_users(["student", "teacher"]))
+    current_user: dict = Depends(allowed_users(["student", "faculty_member"]))
 ):
     """
     Triggers the ONNX AI Model to re-calculate the student's 'Personal Readiness Level'.
@@ -123,7 +125,7 @@ async def update_study_session(
 async def get_session_history(
     user_id: str,
     limit: int = 50,
-    current_user: dict = Depends(allowed_users(["student", "teacher", "admin"]))
+    current_user: dict = Depends(allowed_users(["student", "faculty_member", "admin"]))
 ):
     """
     Get student's study session history.
@@ -147,7 +149,7 @@ async def get_session_history(
 @router.get("/behavior-analysis/{user_id}")
 async def get_behavior_analysis(
     user_id: str,
-    current_user: dict = Depends(allowed_users(["student", "teacher", "admin"]))
+    current_user: dict = Depends(allowed_users(["student", "faculty_member", "admin"]))
 ):
     """
     Get comprehensive behavior analysis:
@@ -189,16 +191,15 @@ async def get_adaptive_content_strategy(
 
 @router.get("/announcements", response_model=List[dict])
 async def get_my_announcements(
-    current_user: dict = Depends(allowed_users(["student", "teacher", "admin"]))
+    current_user: dict = Depends(allowed_users(["student", "faculty_member", "admin"]))
 ):
     """
     Fetch announcements relevant to the current user.
     - Global announcements
     - Role-specific announcements
     """
-    # Get user's role
-    profile = await read_one("user_profiles", current_user["uid"])
-    user_role = profile.get("role_id", "student")
+    # Get user's role designation (student, faculty_member, admin)
+    _, user_role = await get_user_profile_with_role(current_user["uid"])
     
     # Get global announcements
     global_anns = await read_query("announcements", [("is_global", "==", True)])
@@ -232,7 +233,7 @@ async def get_my_announcements(
 @router.post("/announcements/{announcement_id}/read")
 async def mark_announcement_read(
     announcement_id: str,
-    current_user: dict = Depends(allowed_users(["student", "teacher", "admin"]))
+    current_user: dict = Depends(allowed_users(["student", "faculty_member", "admin"]))
 ):
     """
     Mark an announcement as read by the user.
@@ -254,7 +255,7 @@ async def mark_announcement_read(
 @router.get("/notifications")
 async def get_notifications(
     unread_only: bool = False,
-    current_user: dict = Depends(allowed_users(["student", "teacher", "admin"]))
+    current_user: dict = Depends(allowed_users(["student", "faculty_member", "admin"]))
 ):
     """
     Get user's notifications.
@@ -281,7 +282,7 @@ async def get_notifications(
 @router.post("/notifications/{notification_id}/read")
 async def mark_notification_read(
     notification_id: str,
-    current_user: dict = Depends(allowed_users(["student", "teacher", "admin"]))
+    current_user: dict = Depends(allowed_users(["student", "faculty_member", "admin"]))
 ):
     """
     Mark a notification as read.
@@ -296,7 +297,7 @@ async def mark_notification_read(
 
 @router.post("/notifications/read-all")
 async def mark_all_notifications_read(
-    current_user: dict = Depends(allowed_users(["student", "teacher", "admin"]))
+    current_user: dict = Depends(allowed_users(["student", "faculty_member", "admin"]))
 ):
     """
     Mark all user's notifications as read.
@@ -315,3 +316,30 @@ async def mark_all_notifications_read(
     return {
         "message": f"Marked {len(notifications)} notifications as read"
     }
+
+class ReadinessNomination(BaseModel):
+    student_id: str
+    subject_id: str | None = None
+    notes: str | None = None
+
+@router.post("/readiness/nominate")
+async def nominate_readiness(payload: ReadinessNomination, current_user: dict = Depends(allowed_users(["faculty_member"]))):
+    doc = {
+        "student_id": payload.student_id,
+        "subject_id": payload.subject_id,
+        "notes": payload.notes,
+        "nominated_by": current_user["uid"],
+        "status": "pending",
+        "created_at": datetime.utcnow()
+    }
+    res = await create("readiness_nominations", doc)
+    return {"message": "Nomination submitted", "id": res["id"]}
+
+@router.get("/readiness/nominations")
+async def my_nominations(current_user: dict = Depends(allowed_users(["faculty_member", "admin"]))):
+    _, role = await get_user_profile_with_role(current_user["uid"])
+    filters = []
+    if role == "faculty_member":
+        filters = [("nominated_by", "==", current_user["uid"])]
+    nominations = await read_query("readiness_nominations", filters)
+    return {"total": len(nominations), "nominations": nominations}

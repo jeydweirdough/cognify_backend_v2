@@ -14,7 +14,7 @@ from services.question_service import (
 )
 
 # FIX: dependencies=[Depends(...)]
-router = APIRouter(prefix="/questions", tags=["Questions"], dependencies=[Depends(allowed_users(["faculty", "teacher", "admin"]))])
+router = APIRouter(prefix="/questions", tags=["Questions"], dependencies=[Depends(allowed_users(["faculty_member", "admin"]))])
 
 # ===== ROUTES =====
 
@@ -166,7 +166,7 @@ async def bulk_create_questions(
     response_model=List[QuestionResponse],
     summary="Get questions with filters",
     description="Retrieve questions filtered by competency, taxonomy, difficulty, etc.",
-    dependencies=[Depends(allowed_users(["student", "teacher", "admin"]))]
+    dependencies=[Depends(allowed_users(["student", "faculty_member", "admin"]))]
 )
 async def get_questions(
     competency_id: Optional[str] = Query(None, description="Filter by competency"),

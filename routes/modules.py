@@ -6,7 +6,7 @@ from core.security import allowed_users
 from database.models import SubjectSchema
 from datetime import datetime
 
-router = APIRouter(prefix="/modules", tags=["Module Management"], dependencies=[Depends(allowed_users(["faculty", "teacher", "admin"]))])
+router = APIRouter(prefix="/modules", tags=["Module Management"], dependencies=[Depends(allowed_users(["faculty_member", "admin"]))])
 
 @router.post("/upload-smart", summary="Upload Module with AI Auto-Categorization")
 async def upload_module_smart(

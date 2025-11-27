@@ -16,7 +16,7 @@ router = APIRouter(prefix="/analytics", tags=["Analytics & Insights"])
 async def get_passing_rate(
     subject_id: Optional[str] = Query(None),
     assessment_id: Optional[str] = Query(None),
-    current_user: dict = Depends(allowed_users(["admin", "teacher"]))
+    current_user: dict = Depends(allowed_users(["admin", "faculty_member"]))
 ):
     """
     Get passing rate statistics for assessments.
@@ -29,7 +29,7 @@ async def get_passing_rate(
 async def get_passing_probability(
     user_id: str,
     subject_id: str,
-    current_user: dict = Depends(allowed_users(["admin", "teacher", "student"]))
+    current_user: dict = Depends(allowed_users(["admin", "faculty_member", "student"]))
 ):
     """
     Predict probability of student passing based on ML model.
@@ -46,7 +46,7 @@ async def get_passing_probability(
 async def get_student_weaknesses(
     user_id: str,
     subject_id: str,
-    current_user: dict = Depends(allowed_users(["admin", "teacher", "student"]))
+    current_user: dict = Depends(allowed_users(["admin", "faculty_member", "student"]))
 ):
     """
     Analyze student's weak competencies and get study recommendations.
@@ -61,7 +61,7 @@ async def get_student_weaknesses(
 async def get_study_recommendations(
     user_id: str,
     subject_id: str,
-    current_user: dict = Depends(allowed_users(["admin", "teacher", "student"]))
+    current_user: dict = Depends(allowed_users(["admin", "faculty_member", "student"]))
 ):
     """
     Get personalized module recommendations based on:
@@ -86,7 +86,7 @@ async def get_study_recommendations(
 @router.get("/subject/{subject_id}/overview")
 async def get_subject_overview(
     subject_id: str,
-    current_user: dict = Depends(allowed_users(["admin", "teacher"]))
+    current_user: dict = Depends(allowed_users(["admin", "faculty_member"]))
 ):
     """
     Comprehensive analytics dashboard for a subject:
@@ -100,7 +100,7 @@ async def get_subject_overview(
 
 @router.get("/dashboard/teacher")
 async def get_teacher_dashboard(
-    current_user: dict = Depends(allowed_users(["teacher"]))
+    current_user: dict = Depends(allowed_users(["faculty_member"]))
 ):
     """
     Teacher dashboard with all their subjects' analytics.

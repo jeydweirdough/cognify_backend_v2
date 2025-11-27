@@ -34,7 +34,7 @@ async def whitelist_user(
 
     payload = PreRegisteredUserSchema(
         email=email,
-        assigned_role=role,
+        assigned_role=role.value,
         added_by=current_user["uid"]
     )
     
@@ -44,6 +44,35 @@ async def whitelist_user(
         "id": result["id"],
         "auto_verify_on_signup": True
     }
+
+@router.get("/readiness/nominations")
+async def list_readiness_nominations(current_user: dict = Depends(allowed_users(["admin"]))):
+    nominations = await read_query("readiness_nominations", [])
+    return {"total": len(nominations), "nominations": nominations}
+
+@router.post("/readiness/approve/{nomination_id}")
+async def approve_readiness(nomination_id: str, current_user: dict = Depends(allowed_users(["admin"]))):
+    nomination = await read_one("readiness_nominations", nomination_id)
+    if not nomination:
+        raise HTTPException(status_code=404, detail="Nomination not found")
+    student_id = nomination.get("student_id")
+    await update("readiness_nominations", nomination_id, {"status": "approved", "decided_at": datetime.utcnow(), "decided_by": current_user["uid"]})
+    profile = await read_one("user_profiles", student_id)
+    if profile:
+        info = profile.get("student_info", {})
+        info["board_exam_ready"] = True
+        info["board_exam_verified_at"] = datetime.utcnow()
+        info["board_exam_verified_by"] = current_user["uid"]
+        await update("user_profiles", student_id, {"student_info": info})
+    return {"message": "Readiness approved"}
+
+@router.post("/readiness/reject/{nomination_id}")
+async def reject_readiness(nomination_id: str, reason: str = "", current_user: dict = Depends(allowed_users(["admin"]))):
+    nomination = await read_one("readiness_nominations", nomination_id)
+    if not nomination:
+        raise HTTPException(status_code=404, detail="Nomination not found")
+    await update("readiness_nominations", nomination_id, {"status": "rejected", "decided_at": datetime.utcnow(), "decided_by": current_user["uid"], "reason": reason})
+    return {"message": "Readiness rejected"}
 
 
 @router.get("/whitelist", summary="Get all whitelisted users")
@@ -188,17 +217,18 @@ async def create_announcement(
     content: str, 
     target_roles: List[UserRole] = [],
     is_global: bool = False,
-    current_user: dict = Depends(allowed_users(["admin", "teacher"]))
+    current_user: dict = Depends(allowed_users(["admin", "faculty_member"]))
 ):
     """
     Create an announcement.
     - is_global=True: Shows to everyone
     - target_roles: Specific roles (student, teacher, admin)
     """
+    audience = [r.value if hasattr(r, "value") else str(r) for r in target_roles]
     payload = AnnouncementSchema(
         title=title,
         content=content,
-        target_audience=target_roles,
+        target_audience=audience,
         is_global=is_global,
         author_id=current_user["uid"]
     )
@@ -215,7 +245,7 @@ async def create_announcement(
 async def get_all_announcements(
     skip: int = 0,
     limit: int = 20,
-    current_user: dict = Depends(allowed_users(["admin", "teacher"]))
+    current_user: dict = Depends(allowed_users(["admin", "faculty_member"]))
 ):
     """
     Get all announcements (admin/teacher view).
@@ -231,7 +261,7 @@ async def update_announcement(
     content: Optional[str] = None,
     target_roles: Optional[List[UserRole]] = None,
     is_global: Optional[bool] = None,
-    current_user: dict = Depends(allowed_users(["admin", "teacher"]))
+    current_user: dict = Depends(allowed_users(["admin", "faculty_member"]))
 ):
     """
     Update an existing announcement.
@@ -255,7 +285,7 @@ async def update_announcement(
 @router.delete("/announcements/{announcement_id}")
 async def delete_announcement(
     announcement_id: str,
-    current_user: dict = Depends(allowed_users(["admin", "teacher"]))
+    current_user: dict = Depends(allowed_users(["admin", "faculty_member"]))
 ):
     """
     Delete an announcement.
@@ -283,7 +313,7 @@ async def notify_users_about_announcement(
 # =======================
 
 @router.get("/pending-questions", response_model=List[dict])
-async def get_unverified_questions(current_user: dict = Depends(allowed_users(["admin", "teacher"]))):
+async def get_unverified_questions(current_user: dict = Depends(allowed_users(["admin", "faculty_member"]))):
     """
     Fetch questions waiting for verification.
     """
@@ -302,7 +332,7 @@ async def get_unverified_questions(current_user: dict = Depends(allowed_users(["
 @router.post("/verify-question/{question_id}")
 async def verify_question_admin(
     question_id: str, 
-    current_user: dict = Depends(allowed_users(["admin", "teacher"]))
+    current_user: dict = Depends(allowed_users(["admin", "faculty_member"]))
 ):
     """
     Approve a question for use in assessments.
@@ -320,7 +350,7 @@ async def verify_question_admin(
 async def reject_question(
     question_id: str,
     reason: str,
-    current_user: dict = Depends(allowed_users(["admin", "teacher"]))
+    current_user: dict = Depends(allowed_users(["admin", "faculty_member"]))
 ):
     """
     Reject a question with reason.

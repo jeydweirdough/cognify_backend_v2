@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, status, Depends, Body
 from firebase_admin import auth
 from pydantic import BaseModel
 from database.models import LoginSchema, SignUpSchema, UserProfileBase
-from services.crud_services import create, read_query
+from services.crud_services import create, read_query, update
 from services.role_service import get_role_id_by_designation
 from utils.firebase_utils import firebase_login_with_email, refresh_firebase_token
 from core.security import verify_firebase_token
@@ -65,6 +65,19 @@ async def signup(auth_data: SignUpSchema):
         
         # Save to 'user_profiles' using UID as document ID
         await create("user_profiles", data_dict, doc_id=fb_user.uid)
+
+        try:
+            await update(
+                "pre_registered_users",
+                whitelist_entry[0]["id"],
+                {
+                    "is_registered": True,
+                    "registered_at": datetime.utcnow(),
+                    "user_id": fb_user.uid
+                }
+            )
+        except Exception:
+            pass
         
         return {"message": "User created successfully", "uid": fb_user.uid}
 
@@ -84,6 +97,13 @@ async def login(credentials: LoginSchema):
     Frontend expects: { token, refresh_token, uid, message }
     """
     try:
+        existing_profiles = await read_query("user_profiles", [("email", "==", credentials.email)])
+        if not existing_profiles:
+            raise HTTPException(status_code=403, detail="Account not registered")
+        profile = existing_profiles[0]["data"]
+        if not (profile.get("is_registered") and profile.get("is_verified")):
+            raise HTTPException(status_code=403, detail="Account not verified or not registered")
+
         auth_data = firebase_login_with_email(credentials.email, credentials.password)
         
         return {
