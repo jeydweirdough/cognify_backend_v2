@@ -35,6 +35,7 @@ app = FastAPI(
 # CORS MIDDLEWARE
 # ==========================================
 origins = [
+    "http://localhost:8081",
     "http://localhost:5173",      # Default Vite/React port
     "http://127.0.0.1:5173",      # Alternative localhost
     "http://localhost:3000",      # Common React port (optional)
