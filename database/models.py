@@ -381,3 +381,35 @@ class SystemLog(BaseModel):
     target_id: Optional[str] = None
     details: Dict = {}
     timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+# ========================================
+# REQUEST MODELS
+# ========================================
+
+class SubjectUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    pqf_level: Optional[int] = None
+    description: Optional[str] = None
+
+
+class TopicUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    weight_percentage: Optional[float] = None
+    lecture_content: Optional[str] = None
+    image: Optional[str] = None
+
+
+class CompetencyUpdateRequest(BaseModel):
+    code: Optional[str] = None
+    description: Optional[str] = None
+    target_bloom_level: Optional[str] = None
+    target_difficulty: Optional[str] = None
+    allocated_items: Optional[int] = None
+
+
+class TopicCreateRequest(BaseModel):
+    title: str = Field(..., min_length=3)
+    weight_percentage: float = Field(..., ge=0, le=100)
+    competencies: List[Dict[str, Any]] = []
+    lecture_content: Optional[str] = None
+    image: Optional[str] = None
