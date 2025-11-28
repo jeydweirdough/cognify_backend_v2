@@ -158,6 +158,8 @@ async def check_permission(current_user: dict = Depends(verify_firebase_token), 
         uid = current_user['uid']
         role_id = await get_user_role_id(uid)
         role_designation = await get_user_role_designation(role_id)
+
+        print(f"User Role Designation: {uid}")
         
         if "designation" in request:
             requested = request["designation"]

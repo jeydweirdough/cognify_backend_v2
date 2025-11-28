@@ -12,7 +12,8 @@ from firebase_admin import auth
 # Add project root to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from services.crud_services import create, read_query
+# [FIX] Added read_one to imports
+from services.crud_services import create, read_query, read_one
 from database.models import (
     StudentSchema, StudySessionLog, 
     AssessmentSubmission, SubjectSchema
@@ -30,8 +31,9 @@ NUM_FACULTY = 5
 DEFAULT_PASSWORD = "TestPassword123!"
 USER_COLLECTION = "user_profiles"
 
-# Role Designations
-ROLE_DESIGNATIONS = {
+# [FIX] Role Map with Fixed IDs
+# Key = Internal Reference, Value = Firestore Document ID & Designation
+ROLE_MAP = {
     "admin": "admin",
     "student": "student",
     "faculty": "faculty_member"
@@ -71,14 +73,20 @@ def get_utc_now():
 async def create_auth_user(email, role_label):
     """Creates user in Firebase Auth and returns UID."""
     try:
+        # Delete if exists to ensure clean state
+        try:
+            old_user = auth.get_user_by_email(email)
+            auth.delete_user(old_user.uid)
+            print(f"   ♻️  Recreating Auth: {email}")
+        except:
+            pass
+
         user = auth.create_user(
             email=email,
             password=DEFAULT_PASSWORD,
-            display_name=f"{role_label.capitalize()} User"
+            display_name=f"{role_label.capitalize()} User",
+            email_verified=True # Auto-verify for testing
         )
-        return user.uid
-    except firebase_admin.auth.EmailAlreadyExistsError:
-        user = auth.get_user_by_email(email)
         return user.uid
     except Exception as e:
         print(f"❌ Auth Error for {email}: {e}")
@@ -86,29 +94,29 @@ async def create_auth_user(email, role_label):
 
 async def setup_roles():
     """
-    Ensures 'roles' collection exists and retrieves their Doc IDs.
-    This allows us to link users to roles by ID, not just string.
+    Creates 'roles' collection with FIXED Document IDs.
+    This ensures 'roles/student' always exists with ID 'student'.
     """
     print("🔑 Setting up Roles in DB...")
-    role_ids = {}
-
-    for key, designation in ROLE_DESIGNATIONS.items():
-        # Check if role with this designation exists
-        existing = await read_query("roles", [("designation", "==", designation)])
+    
+    for key, designation in ROLE_MAP.items():
+        role_doc_id = designation # Use designation as the ID (e.g. 'admin')
+        
+        # Check if role exists by ID
+        existing = await read_one("roles", role_doc_id)
         
         if existing:
-            role_id = existing[0]["id"]
-            print(f"   ℹ️ Found existing role: {designation} (ID: {role_id})")
+            print(f"   ℹ️  Role exists: {designation}")
         else:
-            # Create it
-            new_role = {"designation": designation, "created_at": get_utc_now()}
-            res = await create("roles", new_role)
-            role_id = res["id"]
-            print(f"   ✅ Created new role: {designation} (ID: {role_id})")
-        
-        role_ids[key] = role_id
+            # Create it with matching ID and designation
+            new_role = {
+                "designation": designation, 
+                "created_at": get_utc_now()
+            }
+            await create("roles", new_role, doc_id=role_doc_id)
+            print(f"   ✅ Created Role: {designation} (ID: {role_doc_id})")
     
-    return role_ids
+    return ROLE_MAP
 
 async def generate_subjects():
     """Creates subjects, topics, and competencies."""
@@ -116,6 +124,7 @@ async def generate_subjects():
     created_subjects = []
     
     for sub_info in SUBJECT_DATA:
+        # Check duplicates
         existing = await read_query("subjects", [("title", "==", sub_info["title"])])
         if existing:
             created_subjects.append(existing[0])
@@ -154,7 +163,7 @@ async def generate_subjects():
     return created_subjects
 
 async def generate_users(role_ids):
-    """Creates Admin, Faculty, and Student users with correct Role IDs."""
+    """Creates Admin, Faculty, and Student users."""
     print("\n👥 Generating Users...")
     
     # 1. Create 1 Admin
@@ -165,13 +174,14 @@ async def generate_users(role_ids):
             "email": email,
             "first_name": "System",
             "last_name": "Admin",
-            "role_id": role_ids["admin"],  # <--- USING EXACT ROLE ID
+            "role_id": role_ids["admin"],  # ID will be "admin"
             "is_verified": True,
             "is_registered": True,
+            "is_active": True,
             "created_at": get_utc_now()
         }
         await create(USER_COLLECTION, user_data, doc_id=uid)
-        print(f"   🛡️ Created Admin: {email}")
+        print(f"   🛡️  Created Admin: {email}")
 
     # 2. Create 5 Faculty Members
     for i in range(NUM_FACULTY):
@@ -183,9 +193,10 @@ async def generate_users(role_ids):
                 "email": email,
                 "first_name": fake.first_name(),
                 "last_name": fake.last_name(),
-                "role_id": role_ids["faculty"], # <--- USING EXACT ROLE ID
+                "role_id": role_ids["faculty"], # ID will be "faculty_member"
                 "is_verified": True,
                 "is_registered": True,
+                "is_active": True,
                 "created_at": get_utc_now()
             }
             await create(USER_COLLECTION, user_data, doc_id=uid)
@@ -201,7 +212,7 @@ async def generate_users(role_ids):
         
         if uid:
             archetype = archetypes[i % 3]
-            
+            # [Logic for archetypes same as before...]
             if archetype == 'high':
                 readiness = PersonalReadinessLevel.HIGH
                 avg_sess = random.uniform(45, 90)
@@ -241,9 +252,10 @@ async def generate_users(role_ids):
                 "email": email,
                 "first_name": fake.first_name(),
                 "last_name": fake.last_name(),
-                "role_id": role_ids["student"], # <--- USING EXACT ROLE ID
+                "role_id": role_ids["student"], # ID will be "student"
                 "is_verified": True,
                 "is_registered": True,
+                "is_active": True,
                 "student_info": student_info.model_dump(),
                 "created_at": get_utc_now()
             }
@@ -259,10 +271,9 @@ async def generate_student_data(student_ids, subjects):
     print("\n📊 Generating Student Activity...")
     
     for uid in student_ids:
-        # 1. Study Logs
+        # Study Logs
         for _ in range(random.randint(5, 10)):
             subj = random.choice(subjects)
-            
             log = StudySessionLog(
                 user_id=uid,
                 resource_id=subj['id'],
@@ -275,10 +286,9 @@ async def generate_student_data(student_ids, subjects):
             )
             await create("study_logs", log.model_dump())
 
-        # 2. Assessment Submissions
+        # Assessment Submissions
         for _ in range(random.randint(2, 5)):
             subj = random.choice(subjects)
-            
             sub = AssessmentSubmission(
                 user_id=uid,
                 assessment_id=str(uuid.uuid4()),
@@ -294,21 +304,16 @@ async def generate_student_data(student_ids, subjects):
     print(f"   ✅ Generated activity for {len(student_ids)} students")
 
 async def main():
-    print("🚀 STARTING FULL SYSTEM POPULATION")
+    print("🚀 STARTING POPULATION (FIXED ROLES)")
     print("==================================")
     
-    # 1. Setup Roles first
     role_ids = await setup_roles()
-    
-    # 2. Generate Data
     subjects = await generate_subjects()
     student_ids = await generate_users(role_ids)
     await generate_student_data(student_ids, subjects)
     
     print("\n==================================")
     print("✨ POPULATION COMPLETE")
-    print(f"💡 Admin Login: {TEST_PREFIX}admin@cvsu.edu.ph / {DEFAULT_PASSWORD}")
-    print(f"💡 Faculty Login: {TEST_PREFIX}faculty_0@cvsu.edu.ph / {DEFAULT_PASSWORD}")
 
 if __name__ == "__main__":
     asyncio.run(main())
