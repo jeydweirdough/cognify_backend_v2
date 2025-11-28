@@ -7,7 +7,8 @@ from services.analytics_service import (
     predict_student_passing_probability,
     analyze_student_weaknesses,
     get_subject_analytics,
-    recommend_study_modules
+    get_global_predictions,
+    get_student_comprehensive_report
 )
 
 router = APIRouter(prefix="/analytics", tags=["Analytics & Insights"])
@@ -129,3 +130,27 @@ async def get_admin_dashboard(
         "overall_passing_rate": 0.0,
         "message": "Admin dashboard - implement system-wide stats"
     }
+
+@router.get("/global_predictions")
+async def get_global_dashboard_data(
+    current_user: dict = Depends(allowed_users(["admin", "faculty_member"]))
+):
+    """
+    Get aggregated predictions for the main dashboard.
+    """
+    return await get_global_predictions()
+
+@router.get("/student_report/{user_id}")
+async def get_student_report_endpoint(
+    user_id: str,
+    current_user: dict = Depends(allowed_users(["admin", "faculty_member", "student"]))
+):
+    """
+    Get a comprehensive analytics report for a specific student.
+    Includes profile, overall performance, predictions, and weaknesses.
+    """
+    # Security check: Students can only view their own report
+    if current_user.get("role") == "student" and current_user["uid"] != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+        
+    return await get_student_comprehensive_report(user_id)

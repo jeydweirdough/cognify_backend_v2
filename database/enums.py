@@ -9,6 +9,7 @@ class AssessmentType(str, Enum):
     PRE_ASSESSMENT = "pre-assessment"
     QUIZ = "quiz"
     POST_ASSESSMENT = "post-assessment"
+    DIAGNOSTIC = "diagnostic"
 
 class QuestionType(str, Enum):
     MULTIPLE_CHOICE = "multiple_choice"

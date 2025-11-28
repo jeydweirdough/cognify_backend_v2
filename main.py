@@ -6,33 +6,14 @@ from contextlib import asynccontextmanager  # <--- Import this
 import uvicorn
 from core.config import Settings
 from routes import auth, tos, modules, students, assessments, admin, analytics, questions, profiles, subject
-from services.inference_service import check_models_health
 
 settings = Settings()
-
-# ==========================================
-# ✅ FIX: LIFESPAN EVENT HANDLER
-# ==========================================
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # --- Startup Logic ---
-    health = check_models_health()
-    if health['all_loaded']:
-        print("✅ AI Models loaded successfully")
-    else:
-        print("⚠️ Some AI models failed to load. Check logs.")
-    
-    yield  # Application runs here
-    
-    # --- Shutdown Logic (Optional) ---
-    print("🛑 Shutting down Cognify API...")
 
 # Initialize App with lifespan
 app = FastAPI(
     title="Cognify API",
     version="2.0",
     description="Backend for Cognify Learning Management System",
-    lifespan=lifespan  # <--- Link the lifespan here
 )
 
 # ==========================================

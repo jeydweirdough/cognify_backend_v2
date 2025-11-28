@@ -19,7 +19,7 @@ from database.models import (
     AssessmentSubmission, SubjectSchema
 )
 from database.enums import (
-    UserRole, PersonalReadinessLevel, ProgressStatus, AssessmentType
+    BloomTaxonomy, DifficultyLevel, QuestionType, UserRole, PersonalReadinessLevel, ProgressStatus, AssessmentType
 )
 
 fake = Faker()
@@ -303,12 +303,158 @@ async def generate_student_data(student_ids, subjects):
             
     print(f"   ✅ Generated activity for {len(student_ids)} students")
 
+CORE_SUBJECTS = [
+{
+    "title": "Theories of Personality",
+    "description": "Study of various personality theories and behavioral patterns.",
+    "topics": [
+            {
+                "title": "General Theories",
+                "weight_percentage": 25.0,
+                "competencies": [
+                    {"code": "TOP.1.1", "description": "Overview of Personality Theories", "target_bloom_level": "understanding", "target_difficulty": "moderate"}
+                ]
+            }
+        ]
+    },
+    {
+        "title": "Abnormal Psychology",
+        "description": "Study of psychopathology and abnormal behavior.",
+        "topics": [
+            {
+                "title": "Clinical Disorders",
+                "weight_percentage": 25.0,
+                "competencies": [
+                    {"code": "ABN.1.1", "description": "Introduction to Diagnostic Categories", "target_bloom_level": "analyzing", "target_difficulty": "moderate"}
+                ]
+            }
+        ]
+    },
+    {
+        "title": "Industrial-Organizational Psychology",
+        "description": "Workplace behavior and organizational dynamics.",
+        "topics": [
+            {
+                "title": "Organizational Behavior",
+                "weight_percentage": 25.0,
+                "competencies": [
+                    {"code": "IO.1.1", "description": "Fundamentals of I/O Psychology", "target_bloom_level": "applying", "target_difficulty": "moderate"}
+                ]
+            }
+        ]
+    },
+    {
+        "title": "Psychological Assessment",
+        "description": "Principles of psychological testing and measurement.",
+        "topics": [
+            {
+                "title": "Psychometrics",
+                "weight_percentage": 25.0,
+                "competencies": [
+                    {"code": "PSY.1.1", "description": "Basic Psychometric Properties", "target_bloom_level": "evaluating", "target_difficulty": "hard"}
+                ]
+            }
+        ]
+    }
+]
+
+async def populate_diagnostic():
+    print("🚀 Starting Diagnostic Test Population...")
+
+    created_questions = []
+    
+    # --- 1. Create Subjects & Hierarchy ---
+    for subj_data in CORE_SUBJECTS:
+        print(f"Processing Subject: {subj_data['title']}...")
+        
+        # Check if subject exists
+        existing = await read_query("subjects", [("title", "==", subj_data["title"])])
+        
+        if existing:
+            subject_id = existing[0]["id"]
+            print(f"   -> Found existing subject {subject_id}")
+            # For simplicity in this script, we assume the structure exists if the subject does.
+            # In production, you'd fetch the topic/competency IDs here.
+            # We will generate a NEW Topic/Competency to ensure we have a clean link for the diagnostic.
+            topic_id = str(uuid.uuid4())
+            competency_id = str(uuid.uuid4())
+            # (In a real run, you would update the subject document with these new topics)
+        else:
+            # Create full hierarchy
+            subject_id = str(uuid.uuid4())
+            topic_id = str(uuid.uuid4())
+            competency_id = str(uuid.uuid4())
+            
+            # Construct the nested data
+            topic_data = subj_data["topics"][0]
+            topic_data["id"] = topic_id
+            topic_data["competencies"][0]["id"] = competency_id
+            
+            payload = {
+                "title": subj_data["title"],
+                "pqf_level": 6,
+                "description": subj_data["description"],
+                "topics": [topic_data],
+                "created_at": datetime.utcnow()
+            }
+            
+            await create("subjects", payload, doc_id=subject_id)
+            print(f"   -> Created new subject {subject_id}")
+
+        # --- 2. Create 5 Questions per Subject ---
+        print(f"   -> Generating 5 Questions...")
+        for i in range(1, 6):
+            q_id = str(uuid.uuid4())
+            question_payload = {
+                "text": f"Diagnostic Question #{i} for {subj_data['title']}: Assess understanding of fundamental concepts.",
+                "type": QuestionType.MULTIPLE_CHOICE,
+                "choices": ["Correct Answer", "Distractor A", "Distractor B", "Distractor C"],
+                "correct_answers": "Correct Answer",
+                "competency_id": competency_id,  # Link to the competency we just made/found
+                "bloom_taxonomy": BloomTaxonomy.UNDERSTANDING,
+                "difficulty_level": DifficultyLevel.MODERATE,
+                "is_verified": True,
+                "tags": ["diagnostic", "core"],
+                "created_at": datetime.utcnow()
+            }
+            
+            await create("questions", question_payload, doc_id=q_id)
+            
+            # Store minimal info for the Assessment object
+            created_questions.append({
+                "id": q_id,
+                "text": question_payload["text"],
+                "choices": question_payload["choices"],
+                "correct_answers": question_payload["correct_answers"],
+                "type": question_payload["type"],
+                "competency_id": competency_id,
+                "bloom_taxonomy": question_payload["bloom_taxonomy"],
+                "difficulty_level": question_payload["difficulty_level"]
+            })
+
+    # --- 3. Create the Diagnostic Assessment ---
+    print("📦 Creating Assessment Record...")
+    assessment_payload = {
+        "title": "Initial Diagnostic Assessment",
+        "type": AssessmentType.DIAGNOSTIC,
+        "subject_id": "general", # Special ID for multi-subject assessments
+        "total_items": 20,
+        "questions": created_questions, # Embed the questions
+        "is_verified": True,
+        "created_at": datetime.utcnow(),
+        "description": "Standard diagnostic test to evaluate readiness across 4 core subjects."
+    }
+    
+    aid = await create("assessments", assessment_payload)
+    print(f"✅ Diagnostic Assessment Created! ID: {aid['id']}")
+
 async def main():
     print("🚀 STARTING POPULATION (FIXED ROLES)")
     print("==================================")
     
     role_ids = await setup_roles()
     subjects = await generate_subjects()
+    assessments = await populate_diagnostic()
     student_ids = await generate_users(role_ids)
     await generate_student_data(student_ids, subjects)
     
