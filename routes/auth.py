@@ -1,6 +1,6 @@
 # routes/auth.py
 from typing import List
-from fastapi import APIRouter, HTTPException, status, Depends, Body
+from fastapi import APIRouter, HTTPException, Response, status, Depends, Body
 from firebase_admin import auth
 from pydantic import BaseModel
 from database.models import LoginSchema, SignUpSchema, UserProfileBase
@@ -91,7 +91,7 @@ async def signup(auth_data: SignUpSchema):
 
 
 @router.post("/login")
-async def login(credentials: LoginSchema):
+async def login(credentials: LoginSchema, response: Response):
     """
     Exchanges Email/Password for a Firebase ID Token.
     Frontend expects: { token, refresh_token, uid, message }
@@ -106,11 +106,28 @@ async def login(credentials: LoginSchema):
 
         auth_data = firebase_login_with_email(credentials.email, credentials.password)
         
+        # Set HTTP-only cookies
+        response.set_cookie(
+            key="access_token",
+            value=auth_data["idToken"],
+            httponly=True,
+            secure=True,  # HTTPS only
+            samesite="lax",
+            max_age=3600  # 1 hour
+        )
+        
+        response.set_cookie(
+            key="refresh_token",
+            value=auth_data["refreshToken"],
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            max_age=2592000  # 30 days
+        )
+        
         return {
             "message": "Login successful",
-            "token": auth_data["idToken"], 
-            "refresh_token": auth_data["refreshToken"],
-            "uid": auth_data["localId"]
+            "uid": auth_data["localId"],
         }
         
     except HTTPException as e:
@@ -159,7 +176,7 @@ async def check_permission(current_user: dict = Depends(verify_firebase_token), 
         role_id = await get_user_role_id(uid)
         role_designation = await get_user_role_designation(role_id)
 
-        print(f"User Role Designation: {uid}")
+        print(f"User Role Designation: {role_designation}")
         
         if "designation" in request:
             requested = request["designation"]
