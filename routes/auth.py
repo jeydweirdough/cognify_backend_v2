@@ -1,10 +1,11 @@
 # routes/auth.py
+from typing import List
 from fastapi import APIRouter, HTTPException, status, Depends, Body
 from firebase_admin import auth
 from pydantic import BaseModel
 from database.models import LoginSchema, SignUpSchema, UserProfileBase
 from services.crud_services import create, read_query, update
-from services.role_service import get_role_id_by_designation
+from services.role_service import get_role_id_by_designation, decode_user, get_user_role_designation, get_user_role_id
 from utils.firebase_utils import firebase_login_with_email, refresh_firebase_token
 from core.security import verify_firebase_token
 from datetime import datetime
@@ -43,7 +44,6 @@ async def signup(auth_data: SignUpSchema):
         fb_user = auth.create_user(
             email=auth_data.email,
             password=auth_data.password,
-            display_name=f"{auth_data.first_name} {auth_data.last_name}"
         )
     except auth.EmailAlreadyExistsError:
         raise HTTPException(status_code=400, detail="Email already registered.")
@@ -151,3 +151,23 @@ async def logout(current_user: dict = Depends(verify_firebase_token)):
         # Even if revocation fails, the frontend clears cookies, so we just log warning
         print(f"Logout revocation failed: {e}")
         return {"message": "Logged out locally"}
+
+@router.post("/permission")
+async def check_permission(current_user: dict = Depends(verify_firebase_token), request: dict = Body(...)):
+    try:
+        uid = current_user['uid']
+        role_id = await get_user_role_id(uid)
+        role_designation = await get_user_role_designation(role_id)
+        
+        if "designation" in request:
+            requested = request["designation"]
+            # Accept a single designation string or a list/tuple of designations
+            if isinstance(requested, (list, tuple)):
+                has_permission = role_designation in requested
+            else:
+                has_permission = role_designation == requested
+            return {"has_permission": has_permission}
+        
+        return {"role_designation": role_designation}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

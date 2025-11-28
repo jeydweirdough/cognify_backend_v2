@@ -1,4 +1,5 @@
 # routes/admin.py
+from collections import defaultdict
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import List, Optional
 from database.models import PreRegisteredUserSchema, AnnouncementSchema
@@ -175,36 +176,96 @@ async def deactivate_user(
 @router.get("/users/statistics")
 async def get_user_statistics(current_user: dict = Depends(allowed_users(["admin"]))):
     """
-    Get system-wide user statistics.
+    Get comprehensive system statistics:
+    - Active User Counts (by role, status)
+    - Whitelisted (Pending Signup) Counts
+    - Content Counts (Subjects, Modules, Assessments, Questions)
     """
-    all_users = await read_query("user_profiles", [])
     
+    # 1. Fetch All Data
+    all_users = await read_query("user_profiles", [])
+    all_roles = await read_query("roles", [])
+    all_whitelist = await read_query("pre_registered_users", [])  # [NEW] Fetch whitelist
+    
+    all_subjects = await read_query("subjects", [])
+    all_assessments = await read_query("assessments", [])
+    all_questions = await read_query("questions", [])
+
+    # 2. Build Role Map
+    role_map = {}
+    for r in all_roles:
+        role_name = r["data"].get("designation", "unknown").lower()
+        role_map[r["id"]] = role_name
+
+    # 3. User Statistics
+    # [FIX] Initialize keys to ensure Pie Chart always sees 'admin'
     stats = {
         "total_users": len(all_users),
-        "by_role": {},
+        "by_role": { "admin": 0, "student": 0, "faculty_member": 0 },
         "verified_users": 0,
         "pending_verification": 0,
-        "active_users": 0
+        "active_users": 0,
+        # [NEW] Whitelist Counts
+        "whitelist_students": 0,
+        "whitelist_faculty": 0
     }
     
+    # Count Active Users
     for user in all_users:
         data = user["data"]
+        role_id = data.get("role_id")
+        role_name = role_map.get(role_id, "unknown")
         
-        # Count by role
-        role = data.get("role_id", "unknown")
-        stats["by_role"][role] = stats["by_role"].get(role, 0) + 1
+        # Fallback for admin if role_id is missing/mismatched
+        if role_name == "unknown" and user["id"] == current_user["uid"]:
+             role_name = "admin"
+
+        # Safe increment
+        if role_name in stats["by_role"]:
+            stats["by_role"][role_name] += 1
+        else:
+            stats["by_role"][role_name] = 1
         
-        # Count verification status
         if data.get("is_verified"):
             stats["verified_users"] += 1
         else:
             stats["pending_verification"] += 1
-        
-        # Count active users
+            
         if data.get("is_active", True):
             stats["active_users"] += 1
+
+    # [NEW] Count Whitelisted Users
+    for w in all_whitelist:
+        # whitelist stores 'assigned_role' as a string value (e.g., "student")
+        role = w["data"].get("assigned_role", "")
+        if role == "student":
+            stats["whitelist_students"] += 1
+        elif role == "faculty_member":
+            stats["whitelist_faculty"] += 1
+
+    # 4. Content Statistics
+    total_modules = 0
+    pending_modules = 0
     
-    return stats
+    for subject in all_subjects:
+        topics = subject["data"].get("topics", [])
+        for topic in topics:
+            if topic.get("lecture_content"):
+                total_modules += 1
+                if not topic.get("is_verified", False):
+                    pending_modules += 1
+
+    # Return Combined Stats
+    return {
+        **stats,
+        "total_subjects": len(all_subjects),
+        "total_modules": total_modules,
+        "pending_modules": pending_modules,
+        "total_assessments": len(all_assessments),
+        "pending_assessments": len([a for a in all_assessments if not a["data"].get("is_verified", False)]),
+        "total_questions": len(all_questions),
+        "pending_questions": len([q for q in all_questions if not q["data"].get("is_verified", False)])
+    }
 
 
 # =======================
@@ -455,3 +516,54 @@ async def system_health(current_user: dict = Depends(allowed_users(["admin"]))):
         "database": "connected",
         "ai_services": "operational"
     }
+
+@router.get("/users/growth")
+async def get_user_growth_statistics(current_user: dict = Depends(allowed_users(["admin"]))):
+    """
+    Get user growth over time.
+    """
+    # Optimized fetch (only needed fields if possible, but Firestore is document-based)
+    all_users = await read_query("user_profiles", [])
+    
+    growth_data = defaultdict(int)
+    
+    for user in all_users:
+        created_at = user["data"].get("created_at")
+        if not created_at:
+            continue
+            
+        # Robust Date Parsing
+        dt = None
+        if isinstance(created_at, datetime):
+            dt = created_at
+        elif isinstance(created_at, str):
+            try:
+                # Handle ISO format with or without microseconds/timezone
+                dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+            except ValueError:
+                continue
+        
+        if dt:
+            month_key = dt.strftime("%Y-%m")
+            growth_data[month_key] += 1
+            
+    # Sort and Aggregate
+    sorted_keys = sorted(growth_data.keys())
+    cumulative_count = 0
+    chart_data = []
+    
+    for month in sorted_keys:
+        count = growth_data[month]
+        cumulative_count += count
+        
+        # Friendly Label: "Jan 24"
+        dt_obj = datetime.strptime(month, "%Y-%m")
+        label = dt_obj.strftime("%b %y")
+        
+        chart_data.append({
+            "date": label,
+            "new_users": count,
+            "total_users": cumulative_count
+        })
+        
+    return chart_data

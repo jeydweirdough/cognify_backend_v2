@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     # --- General ---
     ENVIRONMENT: str = "development"
     SESSION_SECRET_KEY: str
-    ALLOWED_ORIGINS: str = "*"
+    ALLOWED_ORIGINS: list[str] = ["*"]
     PORT: int = 8000
     
     # --- API Keys ---

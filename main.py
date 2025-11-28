@@ -1,10 +1,14 @@
 # main.py
+from typing import List
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager  # <--- Import this
 import uvicorn
+from core.config import Settings
 from routes import auth, tos, modules, students, assessments, admin, analytics, questions, profiles, subject
 from services.inference_service import check_models_health
+
+settings = Settings()
 
 # ==========================================
 # ✅ FIX: LIFESPAN EVENT HANDLER
@@ -34,21 +38,10 @@ app = FastAPI(
 # ==========================================
 # CORS MIDDLEWARE
 # ==========================================
-origins = [
-    "http://localhost:8081",
-    "http://127.0.0.1:8081",
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:3000",
-    "http://10.0.2.2:8081",   # Android emulator
-    "http://10.0.2.2",        # Android
-    "http://192.168.0.0/16",  # local network (Expo Go)
-    "*",  # last fallback (optional but recommended during dev)
-]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
