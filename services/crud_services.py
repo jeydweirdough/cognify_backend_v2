@@ -10,6 +10,7 @@ async def create(collection_name: str, model_data: dict, doc_id: str = None):
     if doc_id:
         doc_ref = collection_ref.document(doc_id)
         doc_ref.set(model_data)
+        # Flatten response for consistency if needed, but keeping legacy format for now
         return {"id": doc_id, "data": model_data}
     
     new_doc_ref = collection_ref.document()
@@ -23,8 +24,33 @@ async def read_one(collection_name: str, doc_id: str):
     doc_ref = db.collection(collection_name).document(doc_id)
     doc = doc_ref.get()
     if doc.exists:
-        return doc.to_dict()
+        data = doc.to_dict()
+        # Inject ID so frontend sees it at the root level
+        data['id'] = doc.id 
+        return data
     return None
+
+# ============================
+# READ - ALL (PAGINATED)   <-- ADDED THIS FUNCTION
+# ============================
+async def read_all(collection_name: str, limit: int = 100, skip: int = 0) -> List[Dict[str, Any]]:
+    """
+    Fetch all documents from a collection with pagination.
+    Returns flattened objects: [{ "id": "1", "title": "Math" }, ...]
+    """
+    collection_ref = db.collection(collection_name)
+    # Note: Firestore offset scales linearly with skip size (can be slow for very large datasets)
+    query = collection_ref.limit(limit).offset(skip)
+    
+    docs = query.stream()
+    
+    results = []
+    for doc in docs:
+        data = doc.to_dict()
+        data["id"] = doc.id
+        results.append(data)
+        
+    return results
 
 # ============================
 # READ - QUERY
@@ -54,6 +80,7 @@ async def read_query(
 
     data = []
     for doc in results:
+        # Keeping your original return format for queries
         data.append({"id": doc.id, "data": doc.to_dict()})
     
     return data

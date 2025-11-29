@@ -1,6 +1,6 @@
 # routes/auth.py
-from typing import List
-from fastapi import APIRouter, HTTPException, Response, status, Depends, Body
+from typing import List, Optional
+from fastapi import APIRouter, HTTPException, Response, status, Depends, Body, Cookie
 from firebase_admin import auth
 from pydantic import BaseModel
 from database.models import LoginSchema, SignUpSchema, UserProfileBase
@@ -12,7 +12,7 @@ from datetime import datetime
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-# Schema for Refresh Token Request
+# Schema for Refresh Token Request - REMOVED or kept unused if needed elsewhere
 class RefreshTokenSchema(BaseModel):
     refresh_token: str
 
@@ -137,25 +137,53 @@ async def login(credentials: LoginSchema, response: Response):
 
 
 @router.post("/refresh")
-async def refresh_token(request: RefreshTokenSchema):
+async def refresh_token(
+    response: Response, 
+    refresh_token: Optional[str] = Cookie(None)
+):
     """
     Called by frontend axios interceptor when 401 occurs.
-    Returns new access token and refresh token.
+    1. Reads 'refresh_token' from HttpOnly cookie (NOT body).
+    2. Refreshes token with Firebase.
+    3. Sets NEW cookies in response.
     """
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="Refresh token missing in cookies")
+
     try:
-        new_tokens = refresh_firebase_token(request.refresh_token)
-        return {
-            "token": new_tokens["token"],
-            "refresh_token": new_tokens["refresh_token"]
-        }
-    except HTTPException as e:
-        raise e
+        new_tokens = refresh_firebase_token(refresh_token)
+        
+        # [FIX] Set the new tokens as cookies so the browser updates them
+        response.set_cookie(
+            key="access_token",
+            value=new_tokens["token"], # Typically 'id_token' or 'access_token' from Firebase response
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            max_age=3600 # 1 hour
+        )
+        
+        response.set_cookie(
+            key="refresh_token",
+            value=new_tokens["refresh_token"],
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            max_age=2592000 # 30 days
+        )
+
+        return {"message": "Token refreshed successfully"}
+        
     except Exception as e:
-        raise HTTPException(status_code=401, detail="Invalid refresh token")
+        print(f"Refresh failed: {e}")
+        # Clear cookies if refresh fails so frontend redirects to login cleanly
+        response.delete_cookie("access_token")
+        response.delete_cookie("refresh_token")
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
 
 @router.post("/logout")
-async def logout(current_user: dict = Depends(verify_firebase_token)):
+async def logout(response: Response, current_user: dict = Depends(verify_firebase_token)):
     """
     Revokes the user's refresh tokens on Firebase to invalidate the session.
     Requires a valid access token in the Authorization header.
@@ -163,10 +191,17 @@ async def logout(current_user: dict = Depends(verify_firebase_token)):
     try:
         uid = current_user['uid']
         auth.revoke_refresh_tokens(uid)
+        
+        # Clear cookies on logout
+        response.delete_cookie("access_token")
+        response.delete_cookie("refresh_token")
+        
         return {"message": "Logged out successfully"}
     except Exception as e:
-        # Even if revocation fails, the frontend clears cookies, so we just log warning
         print(f"Logout revocation failed: {e}")
+        # Force clear cookies even if revocation fails
+        response.delete_cookie("access_token")
+        response.delete_cookie("refresh_token")
         return {"message": "Logged out locally"}
 
 @router.post("/permission")
