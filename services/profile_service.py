@@ -37,6 +37,9 @@ async def get_user_profile_with_role(user_id: str) -> tuple[Dict, str]:
             detail="Role designation not found"
         )
     
+    # [FIX] Inject the resolved role name into the profile object
+    profile["role"] = role_designation.lower()
+    
     return profile, role_designation.lower()
 
 
@@ -51,6 +54,12 @@ async def get_student_related_data(user_id: str) -> Dict[str, Any]:
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Student profile not found"
         )
+
+    # [FIX] Resolve and inject role designation
+    role_id = profile.get("role_id")
+    if role_id:
+        role_name = await get_user_role_designation(role_id)
+        profile["role"] = role_name.lower() if role_name else "student"
     
     # Study logs
     study_logs = await read_query("study_logs", [("user_id", "==", user_id)])
@@ -71,7 +80,7 @@ async def get_student_related_data(user_id: str) -> Dict[str, Any]:
     behavior_profile = student_info.get("behavior_profile", {})
     
     return {
-        "profile": profile,
+        "profile": profile, # Now contains "role": "student"
         "student_info": {
             "personal_readiness": student_info.get("personal_readiness"),
             "confident_subject": student_info.get("confident_subject", []),
@@ -112,6 +121,12 @@ async def get_faculty_profile_data(user_id: str) -> Dict[str, Any]:
             detail="Faculty profile not found"
         )
     
+    # [FIX] Resolve and inject role designation
+    role_id = profile.get("role_id")
+    if role_id:
+        role_name = await get_user_role_designation(role_id)
+        profile["role"] = role_name.lower() if role_name else "faculty_member"
+    
     notifications = await read_query("notifications", [("user_id", "==", user_id)])
     announcements = await read_query("announcements", [("author_id", "==", user_id)])
     questions = await read_query("questions", [("created_by", "==", user_id)])
@@ -139,7 +154,6 @@ async def get_faculty_profile_data(user_id: str) -> Dict[str, Any]:
 async def get_all_students_summary(requester_role: str) -> List[Dict[str, Any]]:
     """
     Get summary of all students.
-    OPTIMIZED: Pre-fetches roles to prevent N+1 queries.
     """
     if requester_role not in ["faculty_member", "admin"]:
         raise HTTPException(
@@ -147,7 +161,6 @@ async def get_all_students_summary(requester_role: str) -> List[Dict[str, Any]]:
             detail="Access denied: Only faculty and admin can view all students"
         )
     
-    # [OPTIMIZATION] Fetch all roles once
     all_roles = await read_query("roles", [])
     role_map = {r["id"]: r["data"].get("designation", "").lower() for r in all_roles}
 
@@ -158,15 +171,14 @@ async def get_all_students_summary(requester_role: str) -> List[Dict[str, Any]]:
         user_data = user["data"]
         role_id = user_data.get("role_id")
         
-        # Check against map in memory
         if role_id and role_map.get(role_id) == "student":
             students.append({
                 "id": user["id"],
                 "email": user_data.get("email"),
                 "first_name": user_data.get("first_name"),
                 "last_name": user_data.get("last_name"),
-                "role": "student", # [FIX] Explicitly return role
-                "role_id": role_id,
+                "role": "student",  # [FIX] Explicitly set role name
+                "role_id": role_id, # [FIX] Keep ID for reference
                 "is_verified": user_data.get("is_verified", False),
                 "profile_picture": user_data.get("profile_picture"),
                 "student_info": {
@@ -175,18 +187,14 @@ async def get_all_students_summary(requester_role: str) -> List[Dict[str, Any]]:
                 }
             })
     
-    # Sort by name for stability
     students.sort(key=lambda x: (x.get("last_name") or "", x.get("first_name") or ""))
-    
     return students
 
 
 async def get_all_faculty_summary() -> List[Dict[str, Any]]:
     """
     Get summary of all faculty members.
-    OPTIMIZED: Pre-fetches roles to prevent N+1 queries.
     """
-    # [OPTIMIZATION] Fetch all roles once
     all_roles = await read_query("roles", [])
     role_map = {r["id"]: r["data"].get("designation", "").lower() for r in all_roles}
 
@@ -197,7 +205,6 @@ async def get_all_faculty_summary() -> List[Dict[str, Any]]:
         user_data = user["data"]
         role_id = user_data.get("role_id")
         
-        # Check against map in memory
         if role_id and role_map.get(role_id) == "faculty_member":
             questions_count = len(await read_query("questions", [("created_by", "==", user["id"])]))
             announcements_count = len(await read_query("announcements", [("author_id", "==", user["id"])]))
@@ -207,7 +214,7 @@ async def get_all_faculty_summary() -> List[Dict[str, Any]]:
                 "email": user_data.get("email"),
                 "first_name": user_data.get("first_name"),
                 "last_name": user_data.get("last_name"),
-                "role": "faculty_member", # [FIX] Explicitly return role
+                "role": "faculty_member", # [FIX] Explicitly set role name
                 "role_id": role_id,
                 "is_verified": user_data.get("is_verified", False),
                 "profile_picture": user_data.get("profile_picture"),
@@ -217,9 +224,7 @@ async def get_all_faculty_summary() -> List[Dict[str, Any]]:
                 }
             })
     
-    # Sort by name for stability
     faculty.sort(key=lambda x: (x.get("last_name") or "", x.get("first_name") or ""))
-    
     return faculty
 
 
@@ -234,12 +239,16 @@ async def get_admin_profile_data(user_id: str) -> Dict[str, Any]:
             detail="Admin profile not found"
         )
     
-    # Basic System statistics (Consider using get_user_statistics for heavier loads)
+    # [FIX] Resolve and inject role designation
+    role_id = profile.get("role_id")
+    if role_id:
+        role_name = await get_user_role_designation(role_id)
+        profile["role"] = role_name.lower() if role_name else "admin"
+    
     all_subjects = await read_query("subjects", [])
     all_questions = await read_query("questions", [])
     all_assessments = await read_query("assessments", [])
     
-    # Pending verifications
     pending_questions = len([q for q in all_questions if not q["data"].get("is_verified", False)])
     pending_assessments = len([a for a in all_assessments if not a["data"].get("is_verified", False)])
     
@@ -256,7 +265,7 @@ async def get_admin_profile_data(user_id: str) -> Dict[str, Any]:
         }
     }
 
-# ... [Keep validate_profile_access, calculate_average_score, get_profile_view_permissions unchanged] ...
+# ... (Keep validate_profile_access, calculate_average_score, get_profile_view_permissions as is) ...
 async def validate_profile_access(
     requester_id: str,
     requester_role: str,

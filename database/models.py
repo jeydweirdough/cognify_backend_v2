@@ -41,7 +41,7 @@ class AnnouncementSchema(TimestampSchema):
     is_global: bool = False
     author_id: str
     
-class MaterialVerificationQueue(BaseModel):
+class MaterialVerificationQueue(VerificationSchema):
     """
     Response model for Admins to see pending materials
     """
@@ -50,6 +50,7 @@ class MaterialVerificationQueue(BaseModel):
     title: str
     submitted_by: str
     submitted_at: datetime
+    details: Optional[str] = None
 
 # --- NEW: ADAPTABILITY & BEHAVIOR TRACKING ---
 class StudySessionLog(TimestampSchema):
@@ -128,11 +129,23 @@ class TopicSchema(TimestampSchema):
     lecture_content: Optional[str]
     image: Optional[str]
 
-class SubjectSchema(TimestampSchema):
+# --- MODIFIED: SUBJECT SCHEMA ---
+class SubjectSchema(TimestampSchema, VerificationSchema): # <--- Inherit VerificationSchema
+    """
+    Represents a course/subject.
+    Now includes Verification fields.
+    """
     title: str
-    pqf_level: int
+    pqf_level: int = 6
+    description: Optional[str] = None
     total_weight_percentage: float = 100.0
-    topics: List[TopicSchema]
+    # topics: List[TopicSchema] = [] # (Assuming TopicSchema is defined above or imported)
+    
+    # Ownership
+    created_by: Optional[str] = None # Admin or Faculty ID
+    
+    is_active: bool = True
+    deleted: bool = False
 
 # --- QUESTION BANK ---
 class QuestionSchema(TimestampSchema, VerificationSchema):

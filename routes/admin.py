@@ -2,7 +2,7 @@
 from collections import defaultdict
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import List, Optional
-from database.models import PreRegisteredUserSchema, AnnouncementSchema
+from database.models import MaterialVerificationQueue, PreRegisteredUserSchema, AnnouncementSchema
 from database.enums import UserRole
 from services.crud_services import create, read_query, update, read_one, delete
 from core.security import allowed_users
@@ -567,3 +567,88 @@ async def get_user_growth_statistics(current_user: dict = Depends(allowed_users(
         })
         
     return chart_data
+
+@router.get("/verification-queue", response_model=List[MaterialVerificationQueue])
+async def get_verification_queue(
+    current_user: dict = Depends(allowed_users(["admin"]))
+):
+    """
+    Get all pending materials (Modules, Questions, Assessments) waiting for verification.
+    """
+    queue = []
+    
+    # 1. Fetch Pending Modules
+    # We filter for is_verified=False AND is_rejected=False (Pending)
+    pending_modules = await read_query("modules", [
+        ("is_verified", "==", False), 
+        ("is_rejected", "==", False),
+        ("deleted", "==", False)
+    ])
+    
+    for m in pending_modules:
+        data = m["data"]
+        # Fetch creator name if needed (optimization: do this in bulk or frontend)
+        creator_name = "Faculty Member" 
+        if data.get("created_by"):
+            user = await read_one("user_profiles", data["created_by"])
+            if user:
+                creator_name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
+
+        queue.append(MaterialVerificationQueue(
+            item_id=m["id"],
+            type="module",
+            title=data.get("title", "Untitled Module"),
+            submitted_by=creator_name,
+            submitted_at=data.get("created_at"),
+            details=data.get("purpose", "No description")
+        ))
+
+    # 2. Fetch Pending Questions
+    pending_questions = await read_query("questions", [
+        ("is_verified", "==", False),
+        ("is_rejected", "==", False)
+    ])
+    
+    for q in pending_questions:
+        data = q["data"]
+        queue.append(MaterialVerificationQueue(
+            item_id=q["id"],
+            type="question",
+            title=f"Question: {data.get('text', '')[:50]}...",
+            submitted_by="System/Faculty", # Update if you track creator on questions
+            submitted_at=data.get("created_at"),
+            details=f"Topic: {data.get('bloom_taxonomy', 'General')}"
+        ))
+
+    # 3. Fetch Pending Assessments
+    pending_assessments = await read_query("assessments", [
+        ("is_verified", "==", False),
+        ("is_rejected", "==", False)
+    ])
+    
+    # 4. [NEW] Pending Subjects
+    pending_subjects = await read_query("subjects", [
+        ("is_verified", "==", False),
+        ("is_rejected", "==", False),
+        ("deleted", "==", False)
+    ])
+    
+    for s in pending_subjects:
+        data = s["data"]
+        creator_name = "System"
+        if data.get("created_by"):
+             user = await read_one("user_profiles", data["created_by"])
+             if user:
+                 creator_name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
+
+        queue.append(MaterialVerificationQueue(
+            item_id=s["id"],
+            type="subject",
+            title=data.get("title", "Untitled Subject"),
+            submitted_by=creator_name,
+            submitted_at=data.get("created_at"),
+            details=f"PQF Level {data.get('pqf_level', 6)}"
+        ))
+
+    queue.sort(key=lambda x: x.submitted_at)
+    return queue

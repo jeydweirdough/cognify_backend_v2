@@ -3,7 +3,7 @@
 Profile viewing routes with role-based access control.
 Implements strict permission checks for data access.
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status, Query
 from typing import List, Dict, Any
 from core.security import verify_firebase_token
 from services.profile_service import (
@@ -19,6 +19,8 @@ from services.profile_service import (
 from services.crud_services import read_one, update
 from pydantic import BaseModel
 from datetime import datetime
+
+from services.upload_service import upload_file
 
 
 router = APIRouter(prefix="/profiles", tags=["User Profiles"])
@@ -422,3 +424,23 @@ async def get_system_overview(current_user: dict = Depends(verify_firebase_token
         "statistics": admin_data["system_statistics"],
         "timestamp": datetime.utcnow()
     }
+
+@router.post("/upload-avatar", summary="Upload profile picture")
+async def upload_profile_picture(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(verify_firebase_token)
+):
+    """
+    Upload a profile picture.
+    Accessible by any authenticated user (Student, Faculty, Admin).
+    """
+    # Validate file type (simple check)
+    if file.content_type not in ["image/jpeg", "image/png", "image/gif", "image/webp"]:
+        raise HTTPException(status_code=400, detail="Only image files allowed")
+        
+    try:
+        # We can optionally add a path prefix like 'avatars/' in the upload_service if supported
+        file_url = await upload_file(file)
+        return {"file_url": file_url}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Avatar upload failed: {str(e)}")
