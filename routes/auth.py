@@ -5,16 +5,12 @@ from firebase_admin import auth
 from pydantic import BaseModel
 from database.models import LoginSchema, SignUpSchema, UserProfileBase
 from services.crud_services import create, read_query, update
-from services.role_service import get_role_id_by_designation, decode_user, get_user_role_designation, get_user_role_id
+from services.role_service import get_role_id_by_designation, get_user_role_designation, get_user_role_id
 from utils.firebase_utils import firebase_login_with_email, refresh_firebase_token
 from core.security import verify_firebase_token
 from datetime import datetime
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
-
-# Schema for Refresh Token Request - REMOVED or kept unused if needed elsewhere
-class RefreshTokenSchema(BaseModel):
-    refresh_token: str
 
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
 async def signup(auth_data: SignUpSchema):
@@ -153,14 +149,14 @@ async def refresh_token(
     try:
         new_tokens = refresh_firebase_token(refresh_token)
         
-        # [FIX] Set the new tokens as cookies so the browser updates them
+        # Set the new tokens as cookies so the browser updates them
         response.set_cookie(
             key="access_token",
-            value=new_tokens["token"], # Typically 'id_token' or 'access_token' from Firebase response
+            value=new_tokens["token"], 
             httponly=True,
             secure=True,
             samesite="lax",
-            max_age=3600 # 1 hour
+            max_age=3600 
         )
         
         response.set_cookie(
@@ -169,7 +165,7 @@ async def refresh_token(
             httponly=True,
             secure=True,
             samesite="lax",
-            max_age=2592000 # 30 days
+            max_age=2592000 
         )
 
         return {"message": "Token refreshed successfully"}
@@ -204,24 +200,27 @@ async def logout(response: Response, current_user: dict = Depends(verify_firebas
         response.delete_cookie("refresh_token")
         return {"message": "Logged out locally"}
 
+# [FIX] Refactored check_permission to avoid swallowing 404s
 @router.post("/permission")
-async def check_permission(current_user: dict = Depends(verify_firebase_token), request: dict = Body(...)):
-    try:
-        uid = current_user['uid']
-        role_id = await get_user_role_id(uid)
-        role_designation = await get_user_role_designation(role_id)
+async def check_permission(
+    current_user: dict = Depends(verify_firebase_token), 
+    request: dict = Body(default={}) # Allow optional body
+):
+    # This will raise 404 (from service) if user profile is missing
+    # We do NOT wrap this in a try/except so the 404 propagates correctly to the frontend
+    uid = current_user['uid']
+    role_id = await get_user_role_id(uid)
+    role_designation = await get_user_role_designation(role_id)
 
-        print(f"User Role Designation: {role_designation}")
-        
-        if "designation" in request:
-            requested = request["designation"]
-            # Accept a single designation string or a list/tuple of designations
-            if isinstance(requested, (list, tuple)):
-                has_permission = role_designation in requested
-            else:
-                has_permission = role_designation == requested
-            return {"has_permission": has_permission}
-        
-        return {"role_designation": role_designation}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    print(f"User Role Designation: {role_designation}")
+    
+    if "designation" in request:
+        requested = request["designation"]
+        # Accept a single designation string or a list/tuple of designations
+        if isinstance(requested, (list, tuple)):
+            has_permission = role_designation in requested
+        else:
+            has_permission = role_designation == requested
+        return {"has_permission": has_permission}
+    
+    return {"role_designation": role_designation}
