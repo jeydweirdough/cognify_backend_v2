@@ -1,4 +1,6 @@
 # main.py
+import dotenv
+dotenv.load_dotenv() 
 from typing import List
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -6,7 +8,6 @@ from contextlib import asynccontextmanager  # <--- Import this
 import uvicorn
 from core.config import Settings
 from routes import auth, tos, modules, students, assessments, admin, analytics, questions, profiles, subject
-
 settings = Settings()
 
 # Initialize App with lifespan
@@ -22,7 +23,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

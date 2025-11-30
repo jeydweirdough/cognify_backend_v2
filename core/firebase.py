@@ -1,7 +1,13 @@
-import firebase_admin
-from firebase_admin import credentials, firestore
+# core/firebase.py
+
+from dotenv import load_dotenv
+load_dotenv()  # Load variables from .env
+
 import os
 import socket
+import json
+import firebase_admin
+from firebase_admin import credentials, firestore
 import google.auth.credentials
 
 # --- AUTO-DETECTION HELPER ---
@@ -25,20 +31,19 @@ EMULATOR_ACTIVE = is_emulator_running()
 if EMULATOR_ACTIVE:
     print(f"🔧 [AUTO-DETECT] Firebase Emulator found on port 9099. Switching to EMULATOR mode.")
     
-    # [FIX] Changed from "demo-project" to "cognify-c17e0" to match your Emulator
-    PROJECT_ID = "cognify-c17e0" 
+    PROJECT_ID = "cognify-v2"  # Adjust to your Emulator project if needed
     
     os.environ["FIRESTORE_EMULATOR_HOST"] = "127.0.0.1:8080"
     os.environ["FIREBASE_AUTH_EMULATOR_HOST"] = "127.0.0.1:9099"
     os.environ["GCLOUD_PROJECT"] = PROJECT_ID
 else:
     print(f"☁️ [AUTO-DETECT] No Emulator found. Switching to PRODUCTION mode.")
-    PROJECT_ID = None # Will be read from serviceAccountKey.json
+    PROJECT_ID = None  # Will be set from credentials
 
 # --- INITIALIZATION ---
 if not firebase_admin._apps:
     if EMULATOR_ACTIVE:
-        # Emulator: Use Anonymous Credentials
+        # Emulator: Use anonymous credentials
         class LocalAnonymousCredential(credentials.Base):
             def get_credential(self):
                 return google.auth.credentials.AnonymousCredentials()
@@ -48,13 +53,21 @@ if not firebase_admin._apps:
             "projectId": PROJECT_ID
         })
     else:
-        # Production: Use Service Account
-        if os.path.exists("serviceAccountKey.json"):
-            cred = credentials.Certificate("serviceAccountKey.json")
-            firebase_admin.initialize_app(cred)
+        # Production: Load credentials from .env
+        service_account_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
+        if service_account_json:
+            try:
+                cred_dict = json.loads(service_account_json)
+                cred = credentials.Certificate(cred_dict)
+                firebase_admin.initialize_app(cred)
+                PROJECT_ID = cred_dict.get("project_id")
+                print(f"✅ Firebase initialized in PRODUCTION mode for project: {PROJECT_ID}")
+            except json.JSONDecodeError:
+                raise ValueError("⚠️ Invalid JSON in FIREBASE_SERVICE_ACCOUNT_JSON environment variable.")
         else:
-            # Fallback if file missing (optional warning)
-            print("⚠️ Warning: serviceAccountKey.json not found for Production mode.")
-            firebase_admin.initialize_app()
+            raise ValueError("⚠️ FIREBASE_SERVICE_ACCOUNT_JSON not set in .env for Production mode.")
 
+# --- FIRESTORE CLIENT ---
 db = firestore.client()
+
+

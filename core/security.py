@@ -1,25 +1,52 @@
-from fastapi import Request, HTTPException, status, Header
-from typing import List
+from fastapi import Cookie, Request, HTTPException, status, Header
+from typing import List, Optional
 from firebase_admin import auth
 from core.firebase import db
 from services.role_service import decode_user, get_user_role_id, get_user_role_designation
 
-def verify_firebase_token(request: Request):
-    # Read from cookie instead of header
-    token = request.cookies.get("access_token")
+async def verify_firebase_token(
+    authorization: Optional[str] = Header(None),
+    access_token: Optional[str] = Cookie(None)
+) -> dict:
+    """
+    Verify Firebase token from either:
+    1. Authorization header (for mobile apps)
+    2. Cookie (for web apps)
+    
+    Returns decoded token with user info.
+    """
+    token = None
+    
+    # Try Authorization header first (mobile)
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split("Bearer ")[1]
+    # Fall back to cookie (web)
+    elif access_token:
+        token = access_token
     
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing authentication token"
+            detail="No authentication token provided"
         )
     
     try:
-        return auth.verify_id_token(token, check_revoked=False)
+        decoded_token = auth.verify_id_token(token)
+        return decoded_token
+    except auth.ExpiredIdTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has expired"
+        )
+    except auth.RevokedIdTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked"
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid token: {str(e)}"
+            detail=f"Invalid authentication token: {str(e)}"
         )
 
 def allowed_users(allowed_roles: List[str]):
