@@ -31,11 +31,15 @@ EMULATOR_ACTIVE = is_emulator_running()
 if EMULATOR_ACTIVE:
     print(f"🔧 [AUTO-DETECT] Firebase Emulator found on port 9099. Switching to EMULATOR mode.")
     
-    PROJECT_ID = "cognify-v2"  # Adjust to your Emulator project if needed
+    # [FIX] Do not hardcode 'cognify-v2'. 
+    # Use the ID the emulator is actually using (cognify-c17e0) or fetch from env.
+    PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "cognify-c17e0")
     
     os.environ["FIRESTORE_EMULATOR_HOST"] = "127.0.0.1:8080"
     os.environ["FIREBASE_AUTH_EMULATOR_HOST"] = "127.0.0.1:9099"
     os.environ["GCLOUD_PROJECT"] = PROJECT_ID
+    
+    print(f"   👉 Target Project ID: {PROJECT_ID}")
 else:
     print(f"☁️ [AUTO-DETECT] No Emulator found. Switching to PRODUCTION mode.")
     PROJECT_ID = None  # Will be set from credentials
@@ -69,5 +73,3 @@ if not firebase_admin._apps:
 
 # --- FIRESTORE CLIENT ---
 db = firestore.client()
-
-

@@ -18,29 +18,110 @@ class ClientTypeHeader(BaseModel):
 
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
 async def signup(auth_data: SignUpSchema):
-    """Signup logic remains the same"""
-    # ... (keep existing signup code)
-    pass
+    """
+    Registers a new user. 
+    Requires the email to be pre-registered (whitelisted) by an admin in 'pre_registered_users'.
+    """
+    # 1. Verify Whitelist / Pre-registration
+    # Check if the email exists in the whitelist
+    whitelist_entries = await read_query("pre_registered_users", [("email", "==", auth_data.email)])
+    
+    if not whitelist_entries:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="This email is not authorized for registration. Please contact the administrator."
+        )
+    
+    whitelist_doc = whitelist_entries[0]
+    whitelist_data = whitelist_doc["data"]
+    
+    # Check if already registered
+    if whitelist_data.get("is_registered", False):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This email is already registered."
+        )
+
+    # 2. Create User in Firebase Authentication
+    try:
+        user = auth.create_user(
+            email=auth_data.email,
+            password=auth_data.password,
+            display_name=f"{auth_data.first_name} {auth_data.last_name}"
+        )
+    except auth.EmailAlreadyExistsError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Account already exists."
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=f"Authentication provider error: {str(e)}"
+        )
+
+    # 3. Determine Role from Whitelist
+    # The whitelist is the source of truth for the role (e.g., 'Student', 'Faculty').
+    assigned_role_name = whitelist_data.get("assigned_role")
+    role_id = None
+    
+    if assigned_role_name:
+        role_id = await get_role_id_by_designation(assigned_role_name)
+    
+    # Fallback to Student if resolution fails (safety net)
+    if not role_id:
+        role_id = await get_role_id_by_designation("Student")
+
+    # 4. Create User Profile in Firestore
+    new_profile = {
+        "uid": user.uid,
+        "email": auth_data.email,
+        "first_name": auth_data.first_name,
+        "last_name": auth_data.last_name,
+        "username": auth_data.username,
+        "role_id": role_id,
+        "is_registered": True,
+        "is_verified": True, # Whitelisted users are implicitly verified
+        "created_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow(),
+        "profile_image": None
+    }
+    
+    # Save to 'user_profiles'
+    await create("user_profiles", new_profile, doc_id=user.uid)
+    
+    # 5. Update Whitelist Entry
+    await update("pre_registered_users", whitelist_doc["id"], {
+        "is_registered": True,
+        "registered_at": datetime.utcnow(),
+        "user_id": user.uid
+    })
+
+    return {"message": "Account created successfully", "uid": user.uid}
 
 @router.post("/login")
 async def login(
     credentials: LoginSchema, 
     response: Response,
-    client_type: Optional[str] = Header(None)  # NEW: Detect client type
+    client_type: Optional[str] = Header(None)
 ):
     """
     Login with support for both web (cookies) and mobile (tokens).
     Mobile apps should send 'Client-Type: mobile' header.
     """
     try:
+        # Check if profile exists and is active
         existing_profiles = await read_query("user_profiles", [("email", "==", credentials.email)])
         if not existing_profiles:
             raise HTTPException(status_code=403, detail="Account not registered")
         
         profile = existing_profiles[0]["data"]
+        
+        # Enforce verification
         if not (profile.get("is_registered") and profile.get("is_verified")):
             raise HTTPException(status_code=403, detail="Account not verified or not registered")
         
+        # Perform Firebase Login
         auth_data = firebase_login_with_email(credentials.email, credentials.password)
         
         # Determine response format based on client type
@@ -91,7 +172,6 @@ async def refresh_token(
 ):
     """
     Refresh token with support for both cookies (web) and body (mobile).
-    Mobile apps should send refresh_token in request body.
     """
     # Try to get refresh token from cookie first, then body
     refresh_token = refresh_token_cookie or refresh_token_body
