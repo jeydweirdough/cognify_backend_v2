@@ -416,7 +416,11 @@ async def get_global_predictions() -> Dict:
             else:
                 bloom_val = str(raw_bloom).lower()
             
-            q_data[q["id"]] = bloom_val
+            # [FIX] Safely get Question ID (handles both 'id' and 'question_id')
+            qid = q.get("id") or q.get("question_id")
+            if qid:
+                q_data[qid] = bloom_val
+                
         assessment_bloom_map[a["id"]] = q_data
 
     # 3. Aggregators

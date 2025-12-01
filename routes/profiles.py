@@ -16,24 +16,31 @@ from services.profile_service import (
     validate_profile_access,
     get_profile_view_permissions
 )
+from services.role_service import get_role_id_by_designation
 from services.crud_services import read_one, update
 from pydantic import BaseModel
 from datetime import datetime
-
 from services.upload_service import upload_file
-
 
 router = APIRouter(prefix="/profiles", tags=["User Profiles"])
 
+# --- SCHEMAS ---
 
 class ProfileUpdateRequest(BaseModel):
-    """Schema for updating profile information."""
+    """Schema for updating OWN profile (Safe fields only)."""
     first_name: str | None = None
     last_name: str | None = None
     middle_name: str | None = None
     username: str | None = None
     profile_picture: str | None = None
 
+class AdminUserUpdateRequest(ProfileUpdateRequest):
+    """
+    Schema for admins updating OTHER users.
+    Includes sensitive fields like role.
+    """
+    role: str | None = None
+    is_verified: bool | None = None
 
 # ========================================
 # SELF PROFILE ACCESS
@@ -41,34 +48,19 @@ class ProfileUpdateRequest(BaseModel):
 
 @router.get("/me", summary="Get current user's profile")
 async def get_my_profile(current_user: dict = Depends(verify_firebase_token)):
-    """
-    Get the authenticated user's own profile with all related data.
-    Works for all roles - returns appropriate data based on role.
-    """
     user_id = current_user["uid"]
     profile, role = await get_user_profile_with_role(user_id)
     
-    # Return role-specific data
     if role == "student":
-        return {
-            "role": role,
-            "data": await get_student_related_data(user_id)
-        }
+        data = await get_student_related_data(user_id)
     elif role == "faculty_member":
-        return {
-            "role": role,
-            "data": await get_faculty_profile_data(user_id)
-        }
+        data = await get_faculty_profile_data(user_id)
     elif role == "admin":
-        return {
-            "role": role,
-            "data": await get_admin_profile_data(user_id)
-        }
+        data = await get_admin_profile_data(user_id)
     else:
-        return {
-            "role": role,
-            "data": {"profile": profile}
-        }
+        data = {"profile": profile}
+        
+    return {"role": role, "data": data}
 
 
 @router.put("/me", summary="Update own profile")
@@ -76,16 +68,10 @@ async def update_my_profile(
     updates: ProfileUpdateRequest,
     current_user: dict = Depends(verify_firebase_token)
 ):
-    """
-    Update the authenticated user's profile information.
-    """
     user_id = current_user["uid"]
     
-    # Prepare update data (only include non-None fields)
-    update_data = {
-        k: v for k, v in updates.model_dump().items() 
-        if v is not None
-    }
+    # Filter out None values
+    update_data = {k: v for k, v in updates.model_dump().items() if v is not None}
     
     if not update_data:
         raise HTTPException(
@@ -93,27 +79,16 @@ async def update_my_profile(
             detail="No fields to update"
         )
     
-    # Add update timestamp
     update_data["updated_at"] = datetime.utcnow()
-    
-    # Update profile
     await update("user_profiles", user_id, update_data)
     
-    return {
-        "message": "Profile updated successfully",
-        "updated_fields": list(update_data.keys())
-    }
+    return {"message": "Profile updated successfully", "updated_fields": list(update_data.keys())}
 
 
 @router.get("/me/permissions", summary="Get my access permissions")
 async def get_my_permissions(current_user: dict = Depends(verify_firebase_token)):
-    """
-    Get what the current user is allowed to view/access.
-    Useful for frontend to conditionally render UI elements.
-    """
     _, role = await get_user_profile_with_role(current_user["uid"])
     permissions = await get_profile_view_permissions(role)
-    
     return {
         "user_id": current_user["uid"],
         "role": role,
@@ -130,54 +105,88 @@ async def get_user_profile(
     target_id: str,
     current_user: dict = Depends(verify_firebase_token)
 ):
-    """
-    View another user's profile.
+    requester_id = current_user["uid"]
+    _, requester_role = await get_user_profile_with_role(requester_id)
     
-    Access Rules:
-    - Students: Can only view their own profile (will be denied)
-    - Faculty: Can view student profiles only
-    - Admin: Can view all profiles
+    await validate_profile_access(requester_id, requester_role, target_id)
+    
+    target_profile, target_role = await get_user_profile_with_role(target_id)
+    
+    if target_role == "student":
+        data = await get_student_related_data(target_id)
+    elif target_role == "faculty_member":
+        data = await get_faculty_profile_data(target_id)
+    elif target_role == "admin":
+        data = await get_admin_profile_data(target_id)
+    else:
+        data = {"profile": target_profile}
+
+    return {"user_id": target_id, "role": target_role, "data": data}
+
+
+# ========================================
+# ADMIN-SPECIFIC UPDATE (THE FIX)
+# ========================================
+
+@router.put("/user/{target_id}", summary="Update another user's profile")
+async def update_target_user_profile(
+    target_id: str,
+    updates: AdminUserUpdateRequest, # <--- MUST USE THIS SCHEMA
+    current_user: dict = Depends(verify_firebase_token)
+):
+    """
+    Update another user's profile information. ADMIN ONLY.
     """
     requester_id = current_user["uid"]
     _, requester_role = await get_user_profile_with_role(requester_id)
     
-    # Validate access permission
-    await validate_profile_access(requester_id, requester_role, target_id)
+    if requester_role != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can update other profiles.")
     
-    # Get target user's role
-    target_profile, target_role = await get_user_profile_with_role(target_id)
+    # Debugging print to see what backend receives
+    print(f"DEBUG: Updating user {target_id} with data: {updates.model_dump()}")
+
+    update_data = {k: v for k, v in updates.model_dump().items() if v is not None}
     
-    # Return appropriate data based on target's role
-    if target_role == "student":
-        return {
-            "user_id": target_id,
-            "role": target_role,
-            "data": await get_student_related_data(target_id)
+    # Handle Role Change
+    if "role" in update_data:
+        raw_role = update_data["role"].lower().strip()
+        # Map common terms to correct Enum values
+        role_map = {
+            "admin": "admin",
+            "student": "student",
+            "teacher": "faculty_member",
+            "faculty": "faculty_member",
+            "faculty_member": "faculty_member"
         }
-    elif target_role == "faculty_member":
-        # Only admin can see this (validation already done above)
-        return {
-            "user_id": target_id,
-            "role": target_role,
-            "data": await get_faculty_profile_data(target_id)
-        }
-    elif target_role == "admin":
-        # Only admin can see this
-        return {
-            "user_id": target_id,
-            "role": target_role,
-            "data": await get_admin_profile_data(target_id)
-        }
-    else:
-        return {
-            "user_id": target_id,
-            "role": target_role,
-            "data": {"profile": target_profile}
-        }
+        normalized_role = role_map.get(raw_role, raw_role)
+        
+        # Look up the ID
+        role_id = await get_role_id_by_designation(normalized_role)
+        if not role_id:
+             # Try capitalizing
+            role_id = await get_role_id_by_designation(normalized_role.capitalize())
+            
+        if not role_id:
+            raise HTTPException(status_code=400, detail=f"Invalid role designation: {update_data['role']}")
+            
+        update_data["role_id"] = role_id
+        del update_data["role"] # Clean up
+
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields to update. Check your payload keys.")
+    
+    update_data["updated_at"] = datetime.utcnow()
+    await update("user_profiles", target_id, update_data)
+    
+    return {
+        "message": f"User {target_id} updated successfully",
+        "updated_fields": list(update_data.keys())
+    }
 
 
 # ========================================
-# LIST USERS (FACULTY & ADMIN ONLY)
+# LISTS & SEARCH
 # ========================================
 
 @router.get("/students", summary="List all students")
@@ -186,261 +195,94 @@ async def list_all_students(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100)
 ):
-    """
-    Get list of all students.
-    
-    Access:
-    - Faculty: Can view all students
-    - Admin: Can view all students
-    - Students: Denied
-    """
     _, requester_role = await get_user_profile_with_role(current_user["uid"])
-    
     if requester_role not in ["faculty_member", "admin"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only faculty and admin can view student list"
-        )
+        raise HTTPException(status_code=403, detail="Forbidden")
     
     students = await get_all_students_summary(requester_role)
-    
-    # Apply pagination
-    total = len(students)
-    paginated = students[skip:skip + limit]
-    
-    return {
-        "total": total,
-        "skip": skip,
-        "limit": limit,
-        "students": paginated
-    }
+    return {"total": len(students), "students": students[skip:skip + limit]}
 
-
-@router.get("/faculty", summary="List all faculty members")
+@router.get("/faculty", summary="List all faculty")
 async def list_all_faculty(
     current_user: dict = Depends(verify_firebase_token),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100)
 ):
-    """
-    Get list of all faculty members.
-    
-    Access:
-    - Admin only
-    - Faculty cannot view other faculty
-    - Students cannot view faculty list
-    """
     _, requester_role = await get_user_profile_with_role(current_user["uid"])
-    
     if requester_role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin can view faculty list"
-        )
+        raise HTTPException(status_code=403, detail="Forbidden")
     
     faculty = await get_all_faculty_summary()
-    
-    # Apply pagination
-    total = len(faculty)
-    paginated = faculty[skip:skip + limit]
-    
-    return {
-        "total": total,
-        "skip": skip,
-        "limit": limit,
-        "faculty": paginated
-    }
+    return {"total": len(faculty), "faculty": faculty[skip:skip + limit]}
 
-
-# ========================================
-# SEARCH FUNCTIONALITY
-# ========================================
-
-@router.get("/search", summary="Search users by name or email")
+@router.get("/search", summary="Search users")
 async def search_users(
     query: str = Query(..., min_length=2),
-    role_filter: str | None = Query(None, regex="^(student|faculty_member|admin)$"),
+    role_filter: str | None = Query(None),
     current_user: dict = Depends(verify_firebase_token)
 ):
-    """
-    Search for users by name or email.
-    
-    Access restrictions apply:
-    - Students: Cannot search (will be denied)
-    - Faculty: Can search students only
-    - Admin: Can search all users
-    """
     requester_id = current_user["uid"]
     _, requester_role = await get_user_profile_with_role(requester_id)
     
-    # Students cannot search
     if requester_role == "student":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Students cannot search for other users"
-        )
-    
-    # Faculty can only search students
+        raise HTTPException(status_code=403, detail="Forbidden")
+        
     if requester_role == "faculty_member":
-        if role_filter and role_filter != "student":
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Faculty can only search for students"
-            )
-        # Force student filter for faculty
-        role_filter = "student"
-    
-    # Get all students (or all users if admin)
+        role_filter = "student" # Faculty can only search students
+        
+    # Logic to fetch users based on role
     if requester_role == "admin" and role_filter != "student":
-        # Admin searching for non-students
         if role_filter == "faculty_member":
             users = await get_all_faculty_summary()
         else:
-            # Search all users
-            students = await get_all_students_summary("admin")
-            faculty = await get_all_faculty_summary()
-            users = students + faculty
+            s = await get_all_students_summary("admin")
+            f = await get_all_faculty_summary()
+            users = s + f
     else:
-        # Search students only
         users = await get_all_students_summary(requester_role)
-    
-    # Filter by query
-    query_lower = query.lower()
-    results = [
-        user for user in users
-        if query_lower in user.get("email", "").lower()
-        or query_lower in user.get("first_name", "").lower()
-        or query_lower in user.get("last_name", "").lower()
-    ]
-    
-    return {
-        "query": query,
-        "role_filter": role_filter,
-        "results_count": len(results),
-        "results": results[:50]  # Limit to 50 results
-    }
-
-
-# ========================================
-# STUDENT-SPECIFIC ENDPOINTS
-# ========================================
-
-@router.get("/student/{student_id}/performance", summary="Get student performance summary")
-async def get_student_performance(
-    student_id: str,
-    current_user: dict = Depends(verify_firebase_token)
-):
-    """
-    Get detailed performance summary for a student.
-    
-    Access:
-    - Student can view their own performance
-    - Faculty can view any student's performance
-    - Admin can view any student's performance
-    """
-    requester_id = current_user["uid"]
-    _, requester_role = await get_user_profile_with_role(requester_id)
-    
-    # Validate access
-    await validate_profile_access(requester_id, requester_role, student_id)
-    
-    # Get student data
-    student_data = await get_student_related_data(student_id)
-    
-    # Extract and return performance metrics
-    return {
-        "student_id": student_id,
-        "readiness": student_data["student_info"]["personal_readiness"],
-        "timeliness": student_data["student_info"]["timeliness"],
-        "behavior_profile": student_data["student_info"]["behavior_profile"],
-        "progress_reports": student_data["student_info"]["progress_report"],
-        "competency_performance": student_data["student_info"]["competency_performance"],
-        "assessment_statistics": student_data["assessments"],
-        "activity_statistics": student_data["activity"]
-    }
-
-
-@router.get("/student/{student_id}/activity", summary="Get student activity logs")
-async def get_student_activity(
-    student_id: str,
-    current_user: dict = Depends(verify_firebase_token),
-    limit: int = Query(20, ge=1, le=100)
-):
-    """
-    Get student's recent activity (study sessions, assessments).
-    
-    Access:
-    - Student can view their own activity
-    - Faculty can view any student's activity
-    - Admin can view any student's activity
-    """
-    requester_id = current_user["uid"]
-    _, requester_role = await get_user_profile_with_role(requester_id)
-    
-    # Validate access
-    await validate_profile_access(requester_id, requester_role, student_id)
-    
-    # Get student data
-    student_data = await get_student_related_data(student_id)
-    
-    # Sort and limit activity
-    study_logs = student_data["activity"]["study_logs"][:limit]
-    assessments = student_data["assessments"]["submissions"][:limit]
-    
-    return {
-        "student_id": student_id,
-        "recent_study_sessions": study_logs,
-        "recent_assessments": assessments,
-        "summary": {
-            "total_sessions": student_data["activity"]["total_sessions"],
-            "completed_sessions": student_data["activity"]["completed_sessions"],
-            "total_assessments": student_data["assessments"]["total_assessments"],
-            "average_score": student_data["assessments"]["average_score"]
-        }
-    }
-
-
-# ========================================
-# ADMIN-SPECIFIC ENDPOINTS
-# ========================================
-
-@router.get("/admin/system-overview", summary="Get system overview")
-async def get_system_overview(current_user: dict = Depends(verify_firebase_token)):
-    """
-    Get comprehensive system statistics.
-    Admin only.
-    """
-    _, requester_role = await get_user_profile_with_role(current_user["uid"])
-    
-    if requester_role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin can view system overview"
-        )
-    
-    admin_data = await get_admin_profile_data(current_user["uid"])
-    
-    return {
-        "statistics": admin_data["system_statistics"],
-        "timestamp": datetime.utcnow()
-    }
-
-@router.post("/upload-avatar", summary="Upload profile picture")
-async def upload_profile_picture(
-    file: UploadFile = File(...),
-    current_user: dict = Depends(verify_firebase_token)
-):
-    """
-    Upload a profile picture.
-    Accessible by any authenticated user (Student, Faculty, Admin).
-    """
-    # Validate file type (simple check)
-    if file.content_type not in ["image/jpeg", "image/png", "image/gif", "image/webp"]:
-        raise HTTPException(status_code=400, detail="Only image files allowed")
         
-    try:
-        # We can optionally add a path prefix like 'avatars/' in the upload_service if supported
-        file_url = await upload_file(file)
-        return {"file_url": file_url}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Avatar upload failed: {str(e)}")
+    q = query.lower()
+    results = [
+        u for u in users 
+        if q in u.get("email", "").lower() or 
+           q in u.get("first_name", "").lower() or 
+           q in u.get("last_name", "").lower()
+    ]
+    return {"results": results[:50]}
+
+# ========================================
+# EXTRAS
+# ========================================
+
+@router.get("/student/{student_id}/performance")
+async def get_student_performance(student_id: str, current_user: dict = Depends(verify_firebase_token)):
+    requester_id = current_user["uid"]
+    _, role = await get_user_profile_with_role(requester_id)
+    await validate_profile_access(requester_id, role, student_id)
+    data = await get_student_related_data(student_id)
+    return {
+        "readiness": data["student_info"]["personal_readiness"],
+        "progress": data["student_info"]["progress_report"]
+    }
+
+@router.get("/student/{student_id}/activity")
+async def get_student_activity(student_id: str, current_user: dict = Depends(verify_firebase_token)):
+    requester_id = current_user["uid"]
+    _, role = await get_user_profile_with_role(requester_id)
+    await validate_profile_access(requester_id, role, student_id)
+    data = await get_student_related_data(student_id)
+    return {"activity": data["activity"]["study_logs"][:10]}
+
+@router.get("/admin/system-overview")
+async def get_system_overview(current_user: dict = Depends(verify_firebase_token)):
+    _, role = await get_user_profile_with_role(current_user["uid"])
+    if role != "admin": raise HTTPException(403, "Forbidden")
+    data = await get_admin_profile_data(current_user["uid"])
+    return {"statistics": data["system_statistics"]}
+
+@router.post("/upload-avatar")
+async def upload_profile_picture(file: UploadFile = File(...), current_user: dict = Depends(verify_firebase_token)):
+    if file.content_type not in ["image/jpeg", "image/png", "image/webp"]:
+        raise HTTPException(400, "Invalid image")
+    url = await upload_file(file)
+    return {"file_url": url}

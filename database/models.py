@@ -23,30 +23,20 @@ class VerificationSchema(BaseModel):
 
 # --- NEW: ADMIN & ANNOUNCEMENTS ---
 class PreRegisteredUserSchema(TimestampSchema):
-    """
-    Whitelist table. Admins add emails here. 
-    Users can only sign up if their email exists here.
-    """
     email: str = Field(..., description="Must be a @cvsu.edu.ph email")
     assigned_role: UserRole
-    added_by: str # Admin ID
+    added_by: str 
 
 class AnnouncementSchema(TimestampSchema):
-    """
-    Announcements created by Admin or Faculty.
-    """
     title: str
     content: str
-    target_audience: List[UserRole] = [] # Empty list = All
+    target_audience: List[UserRole] = [] 
     is_global: bool = False
     author_id: str
     
 class MaterialVerificationQueue(VerificationSchema):
-    """
-    Response model for Admins to see pending materials
-    """
     item_id: str
-    type: str # 'question', 'assessment', 'module'
+    type: str 
     title: str
     submitted_by: str
     submitted_at: datetime
@@ -54,32 +44,21 @@ class MaterialVerificationQueue(VerificationSchema):
 
 # --- NEW: ADAPTABILITY & BEHAVIOR TRACKING ---
 class StudySessionLog(TimestampSchema):
-    """
-    Logs a single study session to track behavior.
-    """
     user_id: str
-    resource_id: str # ID of the Module or Assessment
-    resource_type: str # 'module' or 'assessment'
-    
+    resource_id: str 
+    resource_type: str 
     start_time: datetime
     end_time: Optional[datetime] = None
     duration_seconds: float = 0.0
-    
-    # Behavioral Metrics
-    interruptions_count: int = 0 # How many times they tabbed out or paused
-    idle_time_seconds: float = 0.0 # Detected idle time
-    
+    interruptions_count: int = 0 
+    idle_time_seconds: float = 0.0 
     completion_status: ProgressStatus = ProgressStatus.IN_PROGRESS
 
 class StudentBehaviorProfile(BaseModel):
-    """
-    Aggregated metrics used for AI Adaptability.
-    Stored inside StudentSchema.
-    """
-    average_session_length: float = 0.0 # in minutes
-    preferred_study_time: str = "Any" # Morning, Afternoon, Evening
-    interruption_frequency: str = "Low" # Low, Medium, High
-    learning_pace: str = "Standard" # Fast, Standard, Slow
+    average_session_length: float = 0.0 
+    preferred_study_time: str = "Any" 
+    interruption_frequency: str = "Low" 
+    learning_pace: str = "Standard" 
 
 # --- AUTHENTICATION ---
 class LoginSchema(BaseModel):
@@ -88,28 +67,20 @@ class LoginSchema(BaseModel):
 
     @field_validator("email")
     def validate_cvsu_email(cls, value):
-        # We keep the email validation on login to prevent unnecessary 
-        # API calls for obviously invalid emails
         try:
             if not cvsu_email_verification(value):
                 raise ValueError("Email must belong to the CVSU domain (@cvsu.edu.ph)")
         except NameError:
             pass 
         return value
-    
-    # [FIX] REMOVED validate_password from here. 
-    # Login should not check complexity, only correctness.
 
 class SignUpSchema(LoginSchema):
     first_name: Optional[str]
     last_name: Optional[str]
     role_id: str = Field(get_role_id_by_designation(UserRole.STUDENT))
 
-    # [FIX] MOVED validate_password here. 
-    # Complexity rules now only apply during Registration.
     @field_validator("password")
     def validate_password(cls, value):
-        # 8 chars, 1 upper, 1 lower, 1 digit, 1 special char
         rules = {
             "at least one uppercase letter": r"[A-Z]",
             "at least one lowercase letter": r"[a-z]",
@@ -121,7 +92,7 @@ class SignUpSchema(LoginSchema):
 
 # --- CURATED TOS HIERARCHY ---
 class CompetencySchema(TimestampSchema):
-    code: str  # e.g., "1.1"
+    code: str  
     description: str
     target_bloom_level: BloomTaxonomy 
     target_difficulty: DifficultyLevel 
@@ -134,21 +105,19 @@ class TopicSchema(TimestampSchema):
     lecture_content: Optional[str]
     image: Optional[str]
 
-# --- MODIFIED: SUBJECT SCHEMA ---
-class SubjectSchema(TimestampSchema, VerificationSchema): # <--- Inherit VerificationSchema
-    """
-    Represents a course/subject.
-    Now includes Verification fields.
-    """
+# --- SUBJECT SCHEMA ---
+class SubjectSchema(TimestampSchema, VerificationSchema):
     title: str
     pqf_level: int = 6
     description: Optional[str] = None
     total_weight_percentage: float = 100.0
-    # topics: List[TopicSchema] = [] # (Assuming TopicSchema is defined above or imported)
-    
-    # Ownership
-    created_by: Optional[str] = None # Admin or Faculty ID
-    
+    content: Optional[str] = None 
+    material_url: Optional[str] = None
+    image_url: Optional[str] = None
+    icon_name: Optional[str] = "book"
+    icon_color: Optional[str] = "#000000"
+    icon_bg_color: Optional[str] = "#ffffff"
+    created_by: Optional[str] = None 
     is_active: bool = True
     deleted: bool = False
 
@@ -156,28 +125,21 @@ class SubjectSchema(TimestampSchema, VerificationSchema): # <--- Inherit Verific
 class QuestionSchema(TimestampSchema, VerificationSchema):
     text: str = Field(..., description="The text of the question")
     type: QuestionType
-    choices: Optional[List[str]]
-    correct_answers: Optional[Union[str, bool, List[str]]]
+    choices: Optional[List[str]] = []
+    correct_answers: Optional[Union[str, bool, List[str]]] = None
     
-    # STRICT ALIGNMENT TO TOS
-    competency_id: str = Field(..., description="Links question to specific TOS competency")
-    bloom_taxonomy: BloomTaxonomy
-    difficulty_level: DifficultyLevel
+    # [FIX] Made Optional for easier frontend creation (Ad-hoc quizzes)
+    competency_id: Optional[str] = None 
+    bloom_taxonomy: Optional[BloomTaxonomy] = BloomTaxonomy.REMEMBERING
+    difficulty_level: Optional[DifficultyLevel] = DifficultyLevel.EASY
 
-    @model_validator(mode="after")
-    def validate_all(cls, values):
-        validate_question(
-            question_type=values.type.value,
-            taxonomy=values.bloom_taxonomy.value,
-            choices=values.choices,
-            answers=values.correct_answers
-        )
-        return values
+    # Removed Strict Validation for now to allow partial saves
+    # @model_validator(mode="after") ... 
 
 # --- ASSESSMENT GENERATION ---
 class AssessmentBlueprintSchema(BaseModel):
     subject_id: str
-    target_topics: List[str] # List of Topic IDs to include
+    target_topics: List[str] 
     total_items: int = 0
     easy_percentage: float = 0     
     moderate_percentage: float = 0 
@@ -187,15 +149,21 @@ class AssessmentSchema(TimestampSchema, VerificationSchema):
     title: str
     type: AssessmentType
     subject_id: str
+    
+    # [FIX] Added missing fields to match Frontend Editor
+    module_id: Optional[str] = None
+    description: Optional[str] = None
+    bloom_levels: Optional[List[str]] = []
+
     blueprint: Optional[AssessmentBlueprintSchema] = None
-    questions: List[QuestionSchema]
-    total_items: int
+    questions: List[QuestionSchema] = []
+    total_items: int = 0
 
     @model_validator(mode="after")
     def validate_total_items(cls, values):
-        if values.questions and values.total_items:
-             if len(values.questions) != values.total_items:
-                 raise ValueError("Question count does not match total_items")
+        # Auto-calculate if not provided
+        if values.questions and values.total_items == 0:
+            values.total_items = len(values.questions)
         return values
 
 # --- STUDENT PROGRESS ---
@@ -227,10 +195,7 @@ class StudentSchema(BaseModel):
     personal_readiness: Optional[PersonalReadinessLevel] = None
     confident_subject: Optional[List[str]] = None
     timeliness: int
-    
-    # New Behavioral Data
     behavior_profile: StudentBehaviorProfile = Field(default_factory=StudentBehaviorProfile)
-
     progress_report: Optional[List[StudentProgressReport]] = None
     competency_performance: Optional[List[StudentCompetencyPerformance]] = None
     recommended_study_modules: Optional[List[str]] = None
@@ -334,18 +299,32 @@ class SystemLog(BaseModel):
 # ========================================
 
 class SubjectCreateRequest(BaseModel):
-    """
-    Request model for creating a new subject.
-    Only title and description are required for simplicity/student-personal subjects.
-    """
     title: str = Field(..., description="The title of the subject")
-    description: Optional[str] = Field(None, description="Optional description")
+    pqf_level: int = 6
+    description: Optional[str] = None
     
+    # [NEW]
+    content: Optional[str] = None
+    material_url: Optional[str] = None
+    
+    image_url: Optional[str] = None
+    icon_name: Optional[str] = "book"
+    icon_color: Optional[str] = "#000000"
+    icon_bg_color: Optional[str] = "#ffffff"
 
 class SubjectUpdateRequest(BaseModel):
     title: Optional[str] = None
     pqf_level: Optional[int] = None
     description: Optional[str] = None
+    
+    # [NEW]
+    content: Optional[str] = None
+    material_url: Optional[str] = None
+    
+    image_url: Optional[str] = None
+    icon_name: Optional[str] = None
+    icon_color: Optional[str] = None
+    icon_bg_color: Optional[str] = None
 
 
 class TopicUpdateRequest(BaseModel):

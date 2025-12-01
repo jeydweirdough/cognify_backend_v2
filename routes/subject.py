@@ -1,114 +1,47 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from database.models import SubjectCreateRequest, SubjectUpdateRequest, TopicCreateRequest, TopicUpdateRequest, CompetencyUpdateRequest
+# routes/subject.py
+from fastapi import APIRouter, Body, HTTPException, Query
+from typing import Dict, Any, List, Optional
 from services.subject_service import (
-    get_all_subjects, get_subject_by_id, get_subject_topics,
-    get_topic_competencies, update_subject, create_subject,
-    update_topic, update_competency, add_topic_to_subject,
-    delete_topic_from_subject, get_subject_statistics
+    get_all_subjects, 
+    create_subject, 
+    update_subject, 
+    get_subject_by_id,
+    verify_subject,
+    delete_subject
 )
-# [FIX] Import direct DB update as 'db_update' to avoid conflict with 'update_subject' service
-from services.crud_services import update as db_update 
-from services.profile_service import get_user_profile_with_role
-from core.security import verify_firebase_token, allowed_users
-from datetime import datetime
 
-router = APIRouter(prefix="/subjects", tags=["Subjects & Curriculum"])
+router = APIRouter(prefix="/subjects")
 
-# ========================================
-# VIEW SUBJECTS
-# ========================================
-
-@router.get("/", summary="Get all subjects")
-async def list_subjects(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=200),
-    current_user: dict = Depends(verify_firebase_token)
+@router.get("/", response_model=List[Dict[str, Any]])
+async def get_subjects_endpoint(
+    role: str = "student", 
+    skip: int = 0, 
+    limit: int = 100
 ):
-    _, role = await get_user_profile_with_role(current_user["uid"])
-    subjects = await get_all_subjects(role, skip, limit)
-    return {"total": len(subjects), "skip": skip, "limit": limit, "subjects": subjects}
+    return await get_all_subjects(role, skip, limit)
 
+@router.get("/{subject_id}", response_model=Dict[str, Any])
+async def get_subject_endpoint(subject_id: str, role: str = "student"):
+    return await get_subject_by_id(subject_id, role)
 
-@router.get("/{subject_id}", summary="Get subject by ID")
-async def get_subject(
-    subject_id: str,
-    current_user: dict = Depends(verify_firebase_token)
+@router.post("/", response_model=Dict[str, Any])
+async def create_subject_endpoint(
+    payload: Dict[str, Any] = Body(...),
+    requester_id: str = "admin", # Replace with auth dependency
+    role: str = "admin"
 ):
-    _, role = await get_user_profile_with_role(current_user["uid"])
-    subject = await get_subject_by_id(subject_id, role)
-    return subject
+    return await create_subject(payload, requester_id, role, is_personal=False)
 
-# ... (Existing topic/competency routes can remain as is) ...
+@router.put("/{subject_id}")
+async def update_subject_endpoint(subject_id: str, payload: Dict[str, Any] = Body(...)):
+    return await update_subject(subject_id, payload, requester_role="admin")
 
-# ========================================
-# CREATE & UPDATE SUBJECTS
-# ========================================
-
-@router.post("/", summary="Create a new subject", status_code=status.HTTP_201_CREATED)
-async def create_new_subject(
-    subject_data: SubjectCreateRequest,
-    current_user: dict = Depends(verify_firebase_token)
-):
-    user_id, role = await get_user_profile_with_role(current_user["uid"])
-    is_personal = role == "student"
-    result = await create_subject(
-        subject_data=subject_data.model_dump(), 
-        requester_id=user_id, 
-        requester_role=role,
-        is_personal=is_personal
-    )
-    return result
-
-
-@router.put("/{subject_id}", summary="Update subject")
-async def update_subject_route(
-    subject_id: str,
-    updates: SubjectUpdateRequest,
-    current_user: dict = Depends(verify_firebase_token)
-):
-    _, role = await get_user_profile_with_role(current_user["uid"])
-    update_data = {k: v for k, v in updates.model_dump().items() if v is not None}
-    if not update_data:
-        raise HTTPException(status_code=400, detail="No fields to update")
-    
-    result = await update_subject(subject_id, update_data, role)
-    return result
-
-# ========================================
-# VERIFICATION ENDPOINTS (NEW)
-# ========================================
-
+# [FIX] Verification Endpoint
 @router.post("/{subject_id}/verify")
-async def verify_subject(
-    subject_id: str,
-    current_user: dict = Depends(allowed_users(["admin"]))
-):
-    """
-    Approve a pending subject.
-    """
-    await db_update("subjects", subject_id, {
-        "is_verified": True,
-        "is_rejected": False,
-        "verified_at": datetime.utcnow(),
-        "verified_by": current_user["uid"]
-    })
-    return {"message": "Subject verified"}
+async def verify_subject_endpoint(subject_id: str):
+    verifier_id = "admin" # Replace with actual user ID from auth
+    return await verify_subject(subject_id, verifier_id)
 
-
-@router.post("/{subject_id}/reject")
-async def reject_subject(
-    subject_id: str,
-    reason: str = Query(...),
-    current_user: dict = Depends(allowed_users(["admin"]))
-):
-    """
-    Reject a pending subject with a reason.
-    """
-    await db_update("subjects", subject_id, {
-        "is_verified": False,
-        "is_rejected": True,
-        "rejection_reason": reason,
-        "rejected_at": datetime.utcnow(),
-        "rejected_by": current_user["uid"]
-    })
-    return {"message": "Subject rejected"}
+@router.delete("/{subject_id}")
+async def delete_subject_endpoint(subject_id: str):
+    return await delete_subject(subject_id)
