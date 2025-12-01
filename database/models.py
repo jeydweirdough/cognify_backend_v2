@@ -75,10 +75,39 @@ class LoginSchema(BaseModel):
         return value
 
 class SignUpSchema(LoginSchema):
-    first_name: Optional[str]
-    last_name: Optional[str]
-    role_id: str = Field(get_role_id_by_designation(UserRole.STUDENT))
-
+    first_name: str
+    last_name: str
+    username: Optional[str]
+    role_id: Optional[str] = None  # Will be set by backend based on whitelist
+    
+    @field_validator("first_name")
+    def validate_first_name(cls, value):
+        if not value or not value.strip():
+            raise ValueError("First name is required")
+        if len(value.strip()) < 2:
+            raise ValueError("First name must be at least 2 characters")
+        return value.strip()
+    
+    @field_validator("last_name")
+    def validate_last_name(cls, value):
+        if not value or not value.strip():
+            raise ValueError("Last name is required")
+        if len(value.strip()) < 2:
+            raise ValueError("Last name must be at least 2 characters")
+        return value.strip()
+    
+    @field_validator("username")
+    def validate_username(cls, value):
+        if not value or not value.strip():
+            raise ValueError("Username is required")
+        if len(value.strip()) < 4:
+            raise ValueError("Username must be at least 4 characters")
+        # Remove spaces and convert to lowercase
+        clean_username = value.strip().lower().replace(" ", "")
+        if len(clean_username) < 4:
+            raise ValueError("Username must be at least 4 characters (excluding spaces)")
+        return clean_username
+    
     @field_validator("password")
     def validate_password(cls, value):
         rules = {
@@ -89,6 +118,7 @@ class SignUpSchema(LoginSchema):
             "minimum length of 8 characters": r".{8,}"
         }
         return validate_password_rules(value, rules)
+
 
 # --- CURATED TOS HIERARCHY ---
 class CompetencySchema(TimestampSchema):
