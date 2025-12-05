@@ -15,6 +15,36 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 class ClientTypeHeader(BaseModel):
     """Used to detect if request is from mobile or web"""
     client_type: Optional[str] = None
+    
+# Add to routes/auth.py
+@router.post("/admin/whitelist", status_code=status.HTTP_201_CREATED)
+async def whitelist_email(
+    email: str = Body(...),
+    assigned_role: str = Body(default="Student"),
+    current_user: dict = Depends(verify_firebase_token)
+):
+    """Admin endpoint to whitelist an email for registration"""
+    # Verify admin role
+    user_role = await get_user_role_designation(await get_user_role_id(current_user['uid']))
+    if user_role not in ["admin", "faculty_member"]:  # Adjust to stored designations
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    
+    # Check if already exists
+    existing = await read_query("whitelist", [("email", "==", email)])
+    if existing:
+        raise HTTPException(status_code=409, detail="Email already whitelisted")
+    
+    # Create whitelist entry
+    whitelist_data = {
+        "email": email,
+        "assigned_role": assigned_role,
+        "is_registered": False,
+        "created_at": datetime.utcnow(),
+        "created_by": current_user['uid']
+    }
+    
+    await create("whitelist", whitelist_data)
+    return {"message": "Email whitelisted successfully", "email": email}
 
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
 async def signup(auth_data: SignUpSchema):
@@ -25,7 +55,7 @@ async def signup(auth_data: SignUpSchema):
     try:
         # 1. Verify Whitelist / Pre-registration
         # Check if the email exists in the whitelist
-        whitelist_entries = await read_query("pre_registered_users", [("email", "==", auth_data.email)])
+        whitelist_entries = await read_query("whitelist", [("email", "==", auth_data.email)])
         
         if not whitelist_entries:
             raise HTTPException(
@@ -75,12 +105,19 @@ async def signup(auth_data: SignUpSchema):
         assigned_role_name = whitelist_data.get("assigned_role")
         role_id = None
         
-        if assigned_role_name:
-            role_id = await get_role_id_by_designation(assigned_role_name)
+        if assigned_role_name is not None:
+            s = str(assigned_role_name).strip().lower()
+            if "faculty" in s:
+                designation = "faculty_member"
+            elif "admin" in s:
+                designation = "admin"
+            else:
+                designation = "student"
+            role_id = await get_role_id_by_designation(designation)
         
         # Fallback to Student if resolution fails (safety net)
         if not role_id:
-            role_id = await get_role_id_by_designation("Student")
+            role_id = await get_role_id_by_designation("student")
 
         # 5. Create User Profile in Firestore
         new_profile = {
@@ -101,7 +138,7 @@ async def signup(auth_data: SignUpSchema):
         await create("user_profiles", new_profile, doc_id=user.uid)
         
         # 6. Update Whitelist Entry
-        await update("pre_registered_users", whitelist_doc["id"], {
+        await update("whitelist", whitelist_doc["id"], {
             "is_registered": True,
             "registered_at": datetime.utcnow(),
             "user_id": user.uid
