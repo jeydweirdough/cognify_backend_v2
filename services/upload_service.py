@@ -1,69 +1,51 @@
+import asyncio
+import cloudinary
+import cloudinary.uploader
 from fastapi import UploadFile, HTTPException
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
 from core.config import settings
-import json
 
-# Define the scope
-SCOPES = ['https://www.googleapis.com/auth/drive']
-
-def get_drive_service():
-    """
-    Authenticates using the existing Firebase Service Account.
-    """
-    try:
-        info = settings.FIREBASE_SERVICE_ACCOUNT_JSON
-        
-        # Handle JSON string vs File Path
-        if isinstance(info, str) and info.strip().startswith("{"):
-            creds_dict = json.loads(info)
-            creds = service_account.Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
-        else:
-            creds = service_account.Credentials.from_service_account_file(info, scopes=SCOPES)
-            
-        return build('drive', 'v3', credentials=creds)
-    except Exception as e:
-        print(f"Drive Auth Error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to authenticate with Google Drive")
+# 1. Configure Cloudinary globally
+cloudinary.config( 
+  cloud_name = settings.CLOUDINARY_CLOUD_NAME, 
+  api_key = settings.CLOUDINARY_API_KEY, 
+  api_secret = settings.CLOUDINARY_API_SECRET,
+  secure = True
+)
 
 async def upload_file(file: UploadFile) -> str:
     """
-    Uploads a file to Google Drive and returns a viewable link.
+    Uploads a file to Cloudinary.
+    [CRITICAL FIX] Forces 'raw' resource_type for PDFs so browsers can view them.
     """
-    service = get_drive_service()
     
+    def _sync_upload_task():
+        try:
+            # 1. Determine resource type
+            # PDFs must be 'raw' to bypass image processing and open correctly in browsers
+            # Images can remain 'auto'
+            res_type = "raw" if "pdf" in file.content_type else "auto"
+            
+            # 2. Reset file pointer ensures we read from the start
+            file.file.seek(0)
+            
+            # 3. Upload
+            response = cloudinary.uploader.upload(
+                file.file, 
+                resource_type=res_type, # <--- THIS IS THE FIX
+                folder="cognify_modules",
+                public_id=file.filename.split('.')[0],
+                use_filename=True,
+                unique_filename=True
+            )
+            
+            # 4. Return the secure URL
+            return response.get("secure_url")
+            
+        except Exception as e:
+            print(f"Cloudinary Upload Error: {e}")
+            raise e
+
     try:
-        file_metadata = {
-            'name': file.filename,
-            'parents': [settings.GOOGLE_DRIVE_FOLDER_ID]
-        }
-        
-        # Read file stream
-        media = MediaIoBaseUpload(file.file, mimetype=file.content_type, resumable=True)
-        
-        # Execute Upload
-        created_file = service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields='id, webViewLink, webContentLink'
-        ).execute()
-        
-        # Make the file publicly readable (so frontend can view it)
-        permission = {
-            'type': 'anyone',
-            'role': 'reader',
-        }
-        service.permissions().create(
-            fileId=created_file.get('id'),
-            body=permission,
-            fields='id',
-        ).execute()
-        
-        # Return the "WebViewLink" (Great for PDFs - opens in Drive Viewer)
-        # For images, you might prefer 'webContentLink', but 'webViewLink' is safer/standard
-        return created_file.get('webViewLink')
-        
+        return await asyncio.to_thread(_sync_upload_task)
     except Exception as e:
-        print(f"Drive Upload Error: {e}")
-        raise HTTPException(status_code=500, detail=f"Google Drive upload failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")

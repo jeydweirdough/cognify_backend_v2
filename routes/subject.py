@@ -1,5 +1,5 @@
 # routes/subject.py
-from fastapi import APIRouter, Body, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException, Query, UploadFile, File, Depends, status
 from typing import Dict, Any, List, Optional
 from services.subject_service import (
     get_all_subjects, 
@@ -9,6 +9,8 @@ from services.subject_service import (
     verify_subject,
     delete_subject
 )
+from services.upload_service import upload_file
+from core.security import allowed_users
 
 router = APIRouter(prefix="/subjects")
 
@@ -35,6 +37,32 @@ async def create_subject_endpoint(
 @router.put("/{subject_id}")
 async def update_subject_endpoint(subject_id: str, payload: Dict[str, Any] = Body(...)):
     return await update_subject(subject_id, payload, requester_role="admin")
+
+# [NEW] Image Upload Endpoint for Subjects
+@router.post("/upload-image", summary="Upload subject cover image")
+async def upload_subject_image(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(allowed_users(["admin", "faculty_member"]))
+):
+    """
+    Uploads an image (JPEG/PNG/WEBP) to Google Drive and returns the public URL.
+    This URL should be passed to the 'image_url' field in create/update subject.
+    """
+    if file.content_type not in ["image/jpeg", "image/png", "image/webp"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="Invalid image format. Supported: JPEG, PNG, WEBP"
+        )
+    
+    try:
+        # Re-using the centralized upload service (saves to Google Drive)
+        url = await upload_file(file)
+        return {"image_url": url}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Image upload failed: {str(e)}"
+        )
 
 # [FIX] Verification Endpoint
 @router.post("/{subject_id}/verify")

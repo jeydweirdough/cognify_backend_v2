@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from services.authentication_service import cvsu_email_verification, validate_password_rules
 from services.role_service import get_role_id_by_designation
 from services.question_service import validate_question
-from typing import Dict, List, Optional, Union, Any
+from typing import Dict, List, Literal, Optional, Union, Any
 from enum import Enum
 from database.enums import (
     UserRole, AssessmentType, QuestionType, ProgressStatus, 
@@ -378,3 +378,30 @@ class TopicCreateRequest(BaseModel):
     competencies: List[Dict[str, Any]] = []
     lecture_content: Optional[str] = None
     image: Optional[str] = None
+
+class ModuleSchema(TimestampSchema, VerificationSchema):
+    """
+    Defines the structure for Learning Modules.
+    Matches the frontend 'moduleFormSchema'.
+    """
+    title: str = Field(..., min_length=1, description="Module title")
+    subject_id: str = Field(..., description="ID of the parent subject")
+    purpose: Optional[str] = None
+    
+    # [NEW] Multi-select Bloom's Taxonomy
+    # We use List[str] to accept values like ["remembering", "applying"]
+    bloom_levels: List[str] = [] 
+    
+    # [NEW] Content Switcher Logic
+    # input_type determines if we look at 'content' or 'material_url'
+    input_type: Literal["pdf", "text", "url"] = "pdf"
+    
+    # Stores raw text if user selected "Text Content"
+    content: Optional[str] = Field(default=None, description="Raw text content")
+    
+    # Stores the Google Drive Link if user selected "PDF Upload"
+    material_url: Optional[str] = Field(default=None, description="URL to file resource")
+    
+    # Optional Metadata
+    cover_image_url: Optional[str] = None
+    author: Optional[str] = None

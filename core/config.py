@@ -24,10 +24,10 @@ class Settings(BaseSettings):
     FIREBASE_APP_ID: Optional[str] = None
     FIREBASE_MEASUREMENT_ID: Optional[str] = None
 
-    # --- Google Services ---
-    GOOGLE_DRIVE_FOLDER_ID: str 
-    GOOGLE_CLIENT_ID: Optional[str] = None
-    GOOGLE_CLIENT_SECRET: Optional[str] = None
+    # --- Cloudinary Services ---
+    CLOUDINARY_CLOUD_NAME: str
+    CLOUDINARY_API_KEY: str
+    CLOUDINARY_API_SECRET: str
 
     class Config:
         env_file = ".env"
