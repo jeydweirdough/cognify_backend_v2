@@ -36,7 +36,6 @@ USER_COLLECTION = "user_profiles"
 WHITELIST_COLLECTION = "whitelist"
 
 # --- DATA DEFINITIONS ---
-
 ROLE_MAP = {"admin": "admin", "student": "student", "faculty": "faculty_member"}
 
 # Curriculum Data (Subject -> Topics -> Competencies)
@@ -87,13 +86,13 @@ SUBJECT_DATA = [
                 "comps": [
                     "Design evidence-based training programs",
                     "Apply learning theories to employee training",
-                    "Evaluate training effectiveness using Kirkpatrick’s model",
+                    "Evaluate training effectiveness using Kirkpatrick's model",
                 ],
             },
             {
                 "title": "Work Motivation and Job Satisfaction",
                 "comps": [
-                    "Apply motivation theories (Maslow, Herzberg, Vroom’s Expectancy Theory)",
+                    "Apply motivation theories (Maslow, Herzberg, Vroom's Expectancy Theory)",
                     "Assess factors influencing job satisfaction",
                     "Analyze the relationship between motivation, performance, and productivity",
                 ],
@@ -149,6 +148,267 @@ SUBJECT_DATA = [
     },
 ]
 
+# Generic module content templates
+MODULE_CONTENT_TEMPLATES = [
+    "This module covers the fundamental concepts and theories related to the subject matter. Students will learn about key principles, historical context, and practical applications.",
+    "In this section, we explore the main ideas and methodologies used in the field. This module provides a comprehensive overview of the most important research findings and best practices.",
+    "This learning material introduces students to essential concepts, definitions, and frameworks. Through case studies and practical examples, students will understand real-world applications.",
+    "This module presents a detailed analysis of the core competencies required for mastery. It includes theoretical foundations, practical examples, and assessment strategies.",
+    "Students will engage with key theories, research evidence, and practical strategies in this module. The content emphasizes critical thinking and application of concepts.",
+]
+
+# Sample questions for each subject
+CUSTOM_QUESTIONS = {
+    "Developmental Psychology": [
+        {
+            "text": "Which of the following best describes Erikson's stage of identity vs. role confusion?",
+            "choices": [
+                "Developing trust in caregivers",
+                "Exploring personal values and beliefs",
+                "Learning basic motor skills",
+                "Coping with generativity vs. stagnation",
+            ],
+            "correct": "Exploring personal values and beliefs",
+            "bloom": "understanding",
+            "difficulty": "Moderate",
+        },
+        {
+            "text": "Piaget's concrete operational stage is characterized by:",
+            "choices": [
+                "Symbolic thinking and egocentrism",
+                "Abstract reasoning and hypotheticals",
+                "Logical thinking about concrete objects",
+                "Sensorimotor exploration",
+            ],
+            "correct": "Logical thinking about concrete objects",
+            "bloom": "remembering",
+            "difficulty": "Easy",
+        },
+        {
+            "text": "Which of the following is an example of a psychosocial milestone in adolescence?",
+            "choices": [
+                "Developing object permanence",
+                "Forming intimate peer relationships",
+                "Achieving industry in schoolwork",
+                "Basic trust in caregivers",
+            ],
+            "correct": "Forming intimate peer relationships",
+            "bloom": "applying",
+            "difficulty": "Moderate",
+        },
+        {
+            "text": "Vygotsky emphasized the importance of:",
+            "choices": [
+                "Biological maturation",
+                "Social interaction in cognitive development",
+                "Reinforcement and punishment",
+                "Observational learning alone",
+            ],
+            "correct": "Social interaction in cognitive development",
+            "bloom": "understanding",
+            "difficulty": "Moderate",
+        },
+        {
+            "text": "The attachment theory by Bowlby highlights:",
+            "choices": [
+                "The role of punishment in shaping behavior",
+                "The secure emotional bond between child and caregiver",
+                "The stages of moral reasoning",
+                "Cognitive schemas in learning",
+            ],
+            "correct": "The secure emotional bond between child and caregiver",
+            "bloom": "remembering",
+            "difficulty": "Easy",
+        },
+    ],
+    "Industrial-Organizational Psychology": [
+        {
+            "text": "Which of the following best describes the purpose of job analysis?",
+            "choices": [
+                "To evaluate employees' personal values",
+                "To identify the duties, responsibilities, and skills required for a job",
+                "To study workplace morale and job satisfaction",
+                "To determine an organization's financial goals",
+            ],
+            "correct": "To identify the duties, responsibilities, and skills required for a job",
+            "bloom": "remembering",
+            "difficulty": "Easy",
+        },
+        {
+            "text": "What is the primary goal of performance appraisal in I/O psychology?",
+            "choices": [
+                "To assign salaries randomly",
+                "To assess and improve employee job performance",
+                "To train employees in basic motor skills",
+                "To evaluate personal life satisfaction",
+            ],
+            "correct": "To assess and improve employee job performance",
+            "bloom": "understanding",
+            "difficulty": "Moderate",
+        },
+        {
+            "text": "Which concept refers to an employee's perception of fairness in organizational procedures?",
+            "choices": [
+                "Job enrichment",
+                "Organizational justice",
+                "Social facilitation",
+                "Maslow's hierarchy of needs",
+            ],
+            "correct": "Organizational justice",
+            "bloom": "applying",
+            "difficulty": "Moderate",
+        },
+        {
+            "text": "What is the main focus of work motivation theories in I/O psychology?",
+            "choices": [
+                "Understanding cognitive development",
+                "Explaining what drives employees to perform and stay engaged",
+                "Analyzing market trends for business growth",
+                "Designing ergonomic office furniture",
+            ],
+            "correct": "Explaining what drives employees to perform and stay engaged",
+            "bloom": "understanding",
+            "difficulty": "Easy",
+        },
+        {
+            "text": "Which of the following is an example of an I/O psychologist's role?",
+            "choices": [
+                "Conducting therapy sessions for depression",
+                "Developing recruitment strategies and selection procedures",
+                "Teaching high school psychology classes",
+                "Conducting experiments on infant attachment",
+            ],
+            "correct": "Developing recruitment strategies and selection procedures",
+            "bloom": "remembering",
+            "difficulty": "Easy",
+        },
+    ],
+    "Abnormal Psychology": [
+        {
+            "text": "Which of the following is classified as a mood disorder?",
+            "choices": [
+                "Schizophrenia",
+                "Bipolar disorder",
+                "Obsessive-compulsive disorder",
+                "Panic disorder",
+            ],
+            "correct": "Bipolar disorder",
+            "bloom": "remembering",
+            "difficulty": "Easy",
+        },
+        {
+            "text": "The main feature of schizophrenia is:",
+            "choices": [
+                "Excessive worry",
+                "Delusions and hallucinations",
+                "Recurrent panic attacks",
+                "Impulsivity and hyperactivity",
+            ],
+            "correct": "Delusions and hallucinations",
+            "bloom": "understanding",
+            "difficulty": "Moderate",
+        },
+        {
+            "text": "Generalized Anxiety Disorder (GAD) is characterized by:",
+            "choices": [
+                "Persistent and excessive worry for at least 6 months",
+                "Delusions and hallucinations",
+                "Recurrent episodes of mania",
+                "Impulsive aggression",
+            ],
+            "correct": "Persistent and excessive worry for at least 6 months",
+            "bloom": "remembering",
+            "difficulty": "Easy",
+        },
+        {
+            "text": "Which of the following is a hallmark of obsessive-compulsive disorder?",
+            "choices": [
+                "Mood swings",
+                "Intrusive thoughts and repetitive behaviors",
+                "Paranoia",
+                "Dissociation",
+            ],
+            "correct": "Intrusive thoughts and repetitive behaviors",
+            "bloom": "applying",
+            "difficulty": "Moderate",
+        },
+        {
+            "text": "Post-Traumatic Stress Disorder (PTSD) may develop after:",
+            "choices": [
+                "Chronic workplace stress",
+                "Experiencing or witnessing a traumatic event",
+                "Inadequate parenting",
+                "Genetic predisposition alone",
+            ],
+            "correct": "Experiencing or witnessing a traumatic event",
+            "bloom": "understanding",
+            "difficulty": "Easy",
+        },
+    ],
+    "Psychological Assessment": [
+        {
+            "text": "Which of the following is the primary purpose of a psychometric test?",
+            "choices": [
+                "To provide therapy for mental disorders",
+                "To measure individual differences in psychological traits",
+                "To evaluate physical health",
+                "To predict social popularity",
+            ],
+            "correct": "To measure individual differences in psychological traits",
+            "bloom": "remembering",
+            "difficulty": "Easy",
+        },
+        {
+            "text": "A test that yields consistent results over time is considered:",
+            "choices": [
+                "Valid",
+                "Reliable",
+                "Norm-referenced",
+                "Subjective",
+            ],
+            "correct": "Reliable",
+            "bloom": "understanding",
+            "difficulty": "Moderate",
+        },
+        {
+            "text": "Which type of validity assesses whether a test appears to measure what it claims?",
+            "choices": [
+                "Predictive validity",
+                "Content validity",
+                "Face validity",
+                "Construct validity",
+            ],
+            "correct": "Face validity",
+            "bloom": "remembering",
+            "difficulty": "Easy",
+        },
+        {
+            "text": "Standardization in psychological testing refers to:",
+            "choices": [
+                "Administering a test uniformly across individuals",
+                "Scoring a test based on personal judgment",
+                "Allowing flexibility in instructions",
+                "Adapting test content per examinee",
+            ],
+            "correct": "Administering a test uniformly across individuals",
+            "bloom": "applying",
+            "difficulty": "Moderate",
+        },
+        {
+            "text": "Which assessment tool is most suitable for measuring intelligence?",
+            "choices": [
+                "Rorschach Inkblot Test",
+                "Wechsler Adult Intelligence Scale (WAIS)",
+                "Beck Depression Inventory",
+                "Minnesota Multiphasic Personality Inventory (MMPI)",
+            ],
+            "correct": "Wechsler Adult Intelligence Scale (WAIS)",
+            "bloom": "remembering",
+            "difficulty": "Easy",
+        },
+    ],
+}
+
 
 def get_utc_now():
     return datetime.now(timezone.utc)
@@ -172,7 +432,6 @@ async def create_auth_user(email, role_label):
         return user.uid
     except Exception as e:
         print(f"   ⚠️ Auth Error ({email}): {e}")
-        # If auth fails (e.g. password policy), we skip DB creation for this user
         return None
 
 
@@ -190,7 +449,7 @@ async def setup_roles():
 async def create_whitelist_entry(email, role, adder_id="system"):
     """Adds email to whitelist so they can pass the SignUp check."""
     # Check if exists
-    existing = await read_query(WHITELIST_COLLECTION, [("email", "==", email)])
+    existing = await read_query("whitelist", [("email", "==", email)])
     if existing:
         return existing[0]["id"]
 
@@ -201,7 +460,7 @@ async def create_whitelist_entry(email, role, adder_id="system"):
         "added_by": adder_id,
         "created_at": get_utc_now(),
     }
-    res = await create(WHITELIST_COLLECTION, entry)
+    res = await create("whitelist", entry)
     return res["id"]
 
 
@@ -220,7 +479,7 @@ async def generate_users(role_ids):
                 "email": admin_email,
                 "first_name": "System",
                 "last_name": "Admin",
-                "user_name": "sysadmin",
+                "username": "sysadmin",
                 "role_id": role_ids["admin"],
                 "is_verified": True,
                 "is_registered": True,
@@ -230,6 +489,7 @@ async def generate_users(role_ids):
             doc_id=uid,
         )
         await create_whitelist_entry(admin_email, UserRole.ADMIN, uid)
+        print(f"   ✅ Created Admin: {admin_email}")
 
     # 2. Faculty
     for i in range(NUM_FACULTY):
@@ -242,7 +502,7 @@ async def generate_users(role_ids):
                     "email": email,
                     "first_name": fake.first_name(),
                     "last_name": fake.last_name(),
-                    "user_name": f"faculty_{i}",
+                    "username": f"faculty_{i}",
                     "role_id": role_ids["faculty"],
                     "is_verified": True,
                     "is_registered": True,
@@ -253,6 +513,7 @@ async def generate_users(role_ids):
             )
             faculty_ids.append(uid)
             await create_whitelist_entry(email, UserRole.FACULTY, "system")
+            print(f"   ✅ Created Faculty: {email}")
 
     # 3. Students
     for i in range(NUM_STUDENTS):
@@ -267,8 +528,11 @@ async def generate_users(role_ids):
                 "behavior_profile": {
                     "learning_pace": "Standard",
                     "interruption_frequency": "Low",
+                    "average_session_length": 0.0,
+                    "preferred_study_time": "Any",
                 },
                 "progress_report": [],
+                "competency_performance": [],
             }
             await create(
                 USER_COLLECTION,
@@ -276,7 +540,7 @@ async def generate_users(role_ids):
                     "email": email,
                     "first_name": fake.first_name(),
                     "last_name": fake.last_name(),
-                    "user_name": f"student_{i}",
+                    "username": f"student_{i}",
                     "role_id": role_ids["student"],
                     "is_verified": True,
                     "is_registered": True,
@@ -289,9 +553,7 @@ async def generate_users(role_ids):
             student_ids.append(uid)
             await create_whitelist_entry(email, UserRole.STUDENT, "system")
 
-    print(
-        f"   ✅ Created: {len(student_ids)} Students, {len(faculty_ids)} Faculty, 1 Admin"
-    )
+    print(f"   ✅ Created: {len(student_ids)} Students, {len(faculty_ids)} Faculty, 1 Admin")
     return student_ids, faculty_ids
 
 
@@ -300,10 +562,11 @@ async def reset_database():
     collections = [
         "roles",
         USER_COLLECTION,
-        WHITELIST_COLLECTION,
+        "whitelist",
         "subjects",
         "modules",
         "assessments",
+        "questions",
         "assessment_submissions",
         "study_logs",
     ]
@@ -337,249 +600,43 @@ async def reset_database():
 
 
 async def generate_content(student_ids, faculty_ids):
-    print("\n📚 Generating Content (Subjects, Modules, Assessments)...")
+    print("\n📚 Generating Content (Subjects, Topics, Modules, Questions, Assessments)...")
     created_subjects = []
     total_modules = 0
+    total_questions = 0
     total_assessments = 0
-
-    CUSTOM_QUESTIONS = {
-        "Developmental Psychology": [
-            {
-                "text": "Which of the following best describes Erikson’s stage of identity vs. role confusion?",
-                "choices": [
-                    "A. Developing trust in caregivers",
-                    "B. Exploring personal values and beliefs",
-                    "C. Learning basic motor skills",
-                    "D. Coping with generativity vs. stagnation",
-                ],
-                "correct": "B",
-            },
-            {
-                "text": "Piaget’s concrete operational stage is characterized by:",
-                "choices": [
-                    "A. Symbolic thinking and egocentrism",
-                    "B. Abstract reasoning and hypotheticals",
-                    "C. Logical thinking about concrete objects",
-                    "D. Sensorimotor exploration",
-                ],
-                "correct": "C",
-            },
-            {
-                "text": "Which of the following is an example of a psychosocial milestone in adolescence?",
-                "choices": [
-                    "A. Developing object permanence",
-                    "B. Forming intimate peer relationships",
-                    "C. Achieving industry in schoolwork",
-                    "D. Basic trust in caregivers",
-                ],
-                "correct": "B",
-            },
-            {
-                "text": "Vygotsky emphasized the importance of:",
-                "choices": [
-                    "A. Biological maturation",
-                    "B. Social interaction in cognitive development",
-                    "C. Reinforcement and punishment",
-                    "D. Observational learning alone",
-                ],
-                "correct": "B",
-            },
-            {
-                "text": "The attachment theory by Bowlby highlights:",
-                "choices": [
-                    "A. The role of punishment in shaping behavior",
-                    "B. The secure emotional bond between child and caregiver",
-                    "C. The stages of moral reasoning",
-                    "D. Cognitive schemas in learning",
-                ],
-                "correct": "B",
-            },
-        ],
-        "Industrial-Organizational Psychology": [
-            {
-                "text": "Which of the following best describes the purpose of job analysis?",
-                "choices": [
-                    "A. To evaluate employees’ personal values",
-                    "B. To identify the duties, responsibilities, and skills required for a job",
-                    "C. To study workplace morale and job satisfaction",
-                    "D. To determine an organization’s financial goals",
-                ],
-                "correct": "B",
-            },
-            {
-                "text": "What is the primary goal of performance appraisal in I/O psychology?",
-                "choices": [
-                    "A. To assign salaries randomly",
-                    "B. To assess and improve employee job performance",
-                    "C. To train employees in basic motor skills",
-                    "D. To evaluate personal life satisfaction",
-                ],
-                "correct": "B",
-            },
-            {
-                "text": "Which concept refers to an employee's perception of fairness in organizational procedures and decision-making?",
-                "choices": [
-                    "A. Job enrichment",
-                    "B. Organizational justice",
-                    "C. Social facilitation",
-                    "D. Maslow’s hierarchy of needs",
-                ],
-                "correct": "B",
-            },
-            {
-                "text": "What is the main focus of work motivation theories in I/O psychology?",
-                "choices": [
-                    "A. Understanding cognitive development",
-                    "B. Explaining what drives employees to perform and stay engaged",
-                    "C. Analyzing market trends for business growth",
-                    "D. Designing ergonomic office furniture",
-                ],
-                "correct": "B",
-            },
-            {
-                "text": "Which of the following is an example of an I/O psychologist's role?",
-                "choices": [
-                    "A. Conducting therapy sessions for depression",
-                    "B. Developing recruitment strategies and selection procedures",
-                    "C. Teaching high school psychology classes",
-                    "D. Conducting experiments on infant attachment",
-                ],
-                "correct": "B",
-            },
-        ],
-        "Abnormal Psychology": [
-            {
-                "text": "Which of the following is classified as a mood disorder?",
-                "choices": [
-                    "A. Schizophrenia",
-                    "B. Bipolar disorder",
-                    "C. Obsessive-compulsive disorder",
-                    "D. Panic disorder",
-                ],
-                "correct": "B",
-            },
-            {
-                "text": "The main feature of schizophrenia is:",
-                "choices": [
-                    "A. Excessive worry",
-                    "B. Delusions and hallucinations",
-                    "C. Recurrent panic attacks",
-                    "D. Impulsivity and hyperactivity",
-                ],
-                "correct": "B",
-            },
-            {
-                "text": "Generalized Anxiety Disorder (GAD) is characterized by:",
-                "choices": [
-                    "A. Persistent and excessive worry for at least 6 months",
-                    "B. Delusions and hallucinations",
-                    "C. Recurrent episodes of mania",
-                    "D. Impulsive aggression",
-                ],
-                "correct": "A",
-            },
-            {
-                "text": "Which of the following is a hallmark of obsessive-compulsive disorder?",
-                "choices": [
-                    "A. Mood swings",
-                    "B. Intrusive thoughts and repetitive behaviors",
-                    "C. Paranoia",
-                    "D. Dissociation",
-                ],
-                "correct": "B",
-            },
-            {
-                "text": "Post-Traumatic Stress Disorder (PTSD) may develop after:",
-                "choices": [
-                    "A. Chronic workplace stress",
-                    "B. Experiencing or witnessing a traumatic event",
-                    "C. Inadequate parenting",
-                    "D. Genetic predisposition alone",
-                ],
-                "correct": "B",
-            },
-        ],
-        "Psychological Assessment": [
-            {
-                "text": "Which of the following is the primary purpose of a psychometric test?",
-                "choices": [
-                    "A. To provide therapy for mental disorders",
-                    "B. To measure individual differences in psychological traits",
-                    "C. To evaluate physical health",
-                    "D. To predict social popularity",
-                ],
-                "correct": "B",
-            },
-            {
-                "text": "A test that yields consistent results over time is considered:",
-                "choices": [
-                    "A. Valid",
-                    "B. Reliable",
-                    "C. Norm-referenced",
-                    "D. Subjective",
-                ],
-                "correct": "B",
-            },
-            {
-                "text": "Which type of validity assesses whether a test appears to measure what it claims?",
-                "choices": [
-                    "A. Predictive validity",
-                    "B. Content validity",
-                    "C. Face validity",
-                    "D. Construct validity",
-                ],
-                "correct": "C",
-            },
-            {
-                "text": "Standardization in psychological testing refers to:",
-                "choices": [
-                    "A. Administering a test uniformly across individuals",
-                    "B. Scoring a test based on personal judgment",
-                    "C. Allowing flexibility in instructions",
-                    "D. Adapting test content per examinee",
-                ],
-                "correct": "A",
-            },
-            {
-                "text": "Which assessment tool is most suitable for measuring intelligence?",
-                "choices": [
-                    "A. Rorschach Inkblot Test",
-                    "B. Wechsler Adult Intelligence Scale (WAIS)",
-                    "C. Beck Depression Inventory",
-                    "D. Minnesota Multiphasic Personality Inventory (MMPI)",
-                ],
-                "correct": "B",
-            },
-        ],
-    }
 
     for sub_info in SUBJECT_DATA:
         topics = []
         all_comps_in_subject = []
 
+        # Create Topics and Competencies
         for topic_data in sub_info["topics"]:
             competencies = []
             for comp_text in topic_data["comps"]:
                 comp_id = str(uuid.uuid4())
                 competency = {
                     "id": comp_id,
-                    "code": f"C-{random.randint(100,999)}",
+                    "code": f"C-{random.randint(100, 999)}",
                     "description": comp_text,
                     "target_bloom_level": random.choice(list(BloomTaxonomy)),
                     "target_difficulty": random.choice(list(DifficultyLevel)),
                     "allocated_items": 5,
+                    "created_at": get_utc_now(),
                 }
                 competencies.append(competency)
                 all_comps_in_subject.append(competency)
 
+            topic_id = str(uuid.uuid4())
             topics.append(
                 {
-                    "id": str(uuid.uuid4()),
+                    "id": topic_id,
                     "title": topic_data["title"],
                     "weight_percentage": 33.0,
                     "competencies": competencies,
-                    "lecture_content": "Content placeholder...",
+                    "lecture_content": random.choice(MODULE_CONTENT_TEMPLATES),
                     "image": None,
+                    "created_at": get_utc_now(),
                 }
             )
 
@@ -591,8 +648,12 @@ async def generate_content(student_ids, faculty_ids):
             "total_weight_percentage": 100.0,
             "topics": topics,
             "description": sub_info["description"],
-            "content": "Syllabus content placeholder.",
-            "input_type": "text",
+            "content": "Subject syllabus and overview content.",
+            "material_url": None,
+            "image_url": None,
+            "icon_name": "book",
+            "icon_color": "#000000",
+            "icon_bg_color": "#ffffff",
             "is_verified": is_subject_verified,
             "is_active": True,
             "deleted": False,
@@ -604,69 +665,95 @@ async def generate_content(student_ids, faculty_ids):
         subject_id = sub_res["id"]
         created_subjects.append({"id": subject_id, "data": subject_data})
 
+        # Create Modules for this subject
         for _ in range(random.randint(2, 4)):
             is_mod_verified = random.choice([True, True, False])
             module_data = {
                 "title": f"{fake.word().capitalize()} Module",
                 "subject_id": subject_id,
                 "purpose": fake.sentence(),
-                "bloom_levels": [random.choice(list(BloomTaxonomy))],
+                "bloom_levels": [random.choice(list(BloomTaxonomy)).value],
                 "input_type": "text",
-                "content": fake.paragraph(),
-                "material_url": "",
+                "content": random.choice(MODULE_CONTENT_TEMPLATES),
+                "material_url": None,
+                "cover_image_url": None,
+                "author": random.choice(faculty_ids) if faculty_ids else "system",
                 "is_verified": is_mod_verified,
+                "verified_at": get_utc_now() if is_mod_verified else None,
+                "verified_by": random.choice(faculty_ids) if is_mod_verified and faculty_ids else None,
                 "created_by": random.choice(faculty_ids) if faculty_ids else "system",
                 "created_at": get_utc_now(),
             }
             await create("modules", module_data)
             total_modules += 1
 
-        if not all_comps_in_subject:
-            continue
-
+        # Create Questions for this subject
         custom_list = CUSTOM_QUESTIONS.get(sub_info["title"], [])
-        if not custom_list:
-            continue
-
-        questions = []
-        for item in custom_list:
-            target_comp = random.choice(all_comps_in_subject)
-            questions.append(
-                {
-                    "question_id": str(uuid.uuid4()),
+        if custom_list and all_comps_in_subject:
+            for item in custom_list:
+                target_comp = random.choice(all_comps_in_subject)
+                question_data = {
                     "text": item["text"],
                     "type": QuestionType.MULTIPLE_CHOICE,
                     "choices": item["choices"],
-                    "correct": item["correct"],
-                    "bloom_taxonomy": BloomTaxonomy.UNDERSTANDING,
-                    "difficulty_level": DifficultyLevel.MODERATE,
+                    "correct_answers": item["correct"],
+                    "bloom_taxonomy": item["bloom"],
+                    "difficulty_level": item["difficulty"],
                     "competency_id": target_comp["id"],
-                    "points": 1,
+                    "is_verified": random.choice([True, True, False]),
+                    "verified_at": get_utc_now(),
+                    "verified_by": random.choice(faculty_ids) if faculty_ids else None,
+                    "created_by": random.choice(faculty_ids) if faculty_ids else "system",
+                    "created_at": get_utc_now(),
                 }
-            )
+                await create("questions", question_data)
+                total_questions += 1
 
-        assessment_data = {
-            "title": f"{sub_info['title']} - Diagnostic Assessment",
-            "type": AssessmentType.DIAGNOSTIC,
-            "subject_id": subject_id,
-            "purpose": "Diagnostic",
-            "total_items": len(questions),
-            "questions": questions,
-            "is_verified": True,
-            "is_rejected": False,
-            "created_by": random.choice(faculty_ids) if faculty_ids else "system",
-            "description": "Standard diagnostic test to evaluate readiness across core subjects.",
-            "bloom_levels": list(set([q["bloom_taxonomy"] for q in questions])),
-            "created_at": get_utc_now(),
-        }
+        # Create Assessment for this subject
+        if custom_list and all_comps_in_subject:
+            questions = []
+            for item in custom_list:
+                target_comp = random.choice(all_comps_in_subject)
+                questions.append(
+                    {
+                        "question_id": str(uuid.uuid4()),
+                        "text": item["text"],
+                        "type": QuestionType.MULTIPLE_CHOICE,
+                        "choices": item["choices"],
+                        "correct_answers": item["correct"],
+                        "bloom_taxonomy": item["bloom"],
+                        "difficulty_level": item["difficulty"],
+                        "competency_id": target_comp["id"],
+                        "points": 1,
+                    }
+                )
 
-        ass_res = await create("assessments", assessment_data)
-        total_assessments += 1
-        await generate_submissions(student_ids, ass_res["id"], assessment_data)
+            assessment_data = {
+                "title": f"{sub_info['title']} - Diagnostic Assessment",
+                "type": AssessmentType.DIAGNOSTIC.value,
+                "subject_id": subject_id,
+                "description": f"Standard diagnostic test for {sub_info['title']}",
+                "module_id": None,
+                "bloom_levels": list(set([q["bloom_taxonomy"] for q in questions])),
+                "total_items": len(questions),
+                "questions": questions,
+                "is_verified": True,
+                "is_rejected": False,
+                "created_by": random.choice(faculty_ids) if faculty_ids else "system",
+                "created_at": get_utc_now(),
+            }
 
-    print(
-        f"   ✅ Created: {len(created_subjects)} Subjects, {total_modules} Modules, {total_assessments} Active Assessments"
-    )
+            ass_res = await create("assessments", assessment_data)
+            total_assessments += 1
+
+            # Generate Student Submissions
+            if student_ids:
+                await generate_submissions(student_ids, ass_res["id"], assessment_data)
+
+    print(f"   ✅ Created: {len(created_subjects)} Subjects")
+    print(f"   ✅ Created: {total_modules} Modules")
+    print(f"   ✅ Created: {total_questions} Questions")
+    print(f"   ✅ Created: {total_assessments} Assessments")
 
 
 async def generate_submissions(student_ids, assessment_id, assessment_data):
@@ -674,7 +761,7 @@ async def generate_submissions(student_ids, assessment_id, assessment_data):
     questions = assessment_data["questions"]
 
     # Randomly select 70% of students to have taken this assessment
-    taking_students = random.sample(student_ids, k=int(len(student_ids) * 0.7))
+    taking_students = random.sample(student_ids, k=max(1, int(len(student_ids) * 0.7)))
 
     for uid in taking_students:
         # Simulate student performance
@@ -692,6 +779,7 @@ async def generate_submissions(student_ids, assessment_id, assessment_data):
             answers.append(
                 {
                     "question_id": q["question_id"],
+                    "answer": q["choices"][0] if is_correct else random.choice(q["choices"]),
                     "is_correct": is_correct,
                     "competency_id": q["competency_id"],
                     "bloom_taxonomy": q["bloom_taxonomy"],
@@ -721,16 +809,19 @@ async def generate_submissions(student_ids, assessment_id, assessment_data):
                 "resource_id": assessment_id,
                 "resource_type": "assessment",
                 "start_time": get_utc_now() - timedelta(days=random.randint(1, 30)),
+                "end_time": get_utc_now() - timedelta(days=random.randint(0, 30)),
                 "duration_seconds": random.randint(300, 3600),
-                "completion_status": ProgressStatus.COMPLETED,
+                "interruptions_count": random.randint(0, 5),
+                "idle_time_seconds": random.randint(0, 600),
+                "completion_status": ProgressStatus.COMPLETED.value,
                 "created_at": get_utc_now(),
             },
         )
 
 
 async def main():
-    print("🚀 STARTING POPULATION")
-    print("==================================")
+    print("🚀 STARTING COMPREHENSIVE DATABASE POPULATION")
+    print("=" * 50)
     await reset_database()
 
     # 1. Setup Roles
@@ -740,15 +831,20 @@ async def main():
     student_ids, faculty_ids = await generate_users(role_ids)
 
     # 3. Create Content & Analytics
-    # This function creates Subjects -> Modules -> Assessments -> Submissions
     await generate_content(student_ids, faculty_ids)
 
-    print("\n==================================")
+    print("\n" + "=" * 50)
     print("✨ POPULATION COMPLETE")
-    print("   - Users are in 'user_profiles' AND 'whitelist'")
-    print("   - Subjects have Topics and Competencies")
-    print("   - Mixed Verification status (check Admin Dashboard)")
-    print("   - Analytics data generated for verified assessments")
+    print("=" * 50)
+    print("\n📊 Summary:")
+    print("   ✅ Roles configured")
+    print("   ✅ Users created and whitelisted")
+    print("   ✅ Curriculum structure (Subjects → Topics → Competencies)")
+    print("   ✅ Modules with generic text content")
+    print("   ✅ Questions from question bank")
+    print("   ✅ Assessments with student submissions")
+    print("   ✅ Study logs and analytics data")
+    print("\n🎯 Ready for testing!")
 
 
 if __name__ == "__main__":
