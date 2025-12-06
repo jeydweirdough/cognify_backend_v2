@@ -15,37 +15,64 @@ cloudinary.config(
 async def upload_file(file: UploadFile) -> str:
     """
     Uploads a file to Cloudinary.
-    [CRITICAL FIX] Forces 'raw' resource_type for PDFs so browsers can view them.
+    Forces 'raw' resource_type and 'public' access_mode for PDFs to ensure they are viewable.
     """
     
     def _sync_upload_task():
         try:
-            # 1. Determine resource type
-            # PDFs must be 'raw' to bypass image processing and open correctly in browsers
-            # Images can remain 'auto'
-            res_type = "raw" if "pdf" in file.content_type else "auto"
+            # 1. Determine resource type and format
+            is_pdf = "pdf" in file.content_type.lower()
+            res_type = "raw" if is_pdf else "auto"
+            
+            upload_format = None
+            upload_type = None
+            
+            if is_pdf:
+                # CRITICAL: Cloudinary needs specific settings for raw/PDF files
+                res_type = "raw"
+                upload_type = "upload" # Explicitly use standard upload type
+                try:
+                    # Extract extension to fix "N/A" format
+                    upload_format = file.filename.rsplit('.', 1)[-1].lower()
+                except IndexError:
+                    pass
             
             # 2. Reset file pointer ensures we read from the start
             file.file.seek(0)
             
-            # 3. Upload
+            # 3. Upload with ALL necessary parameters
             response = cloudinary.uploader.upload(
                 file.file, 
-                resource_type=res_type, # <--- THIS IS THE FIX
+                resource_type=res_type,
                 folder="cognify_modules",
                 public_id=file.filename.split('.')[0],
                 use_filename=True,
-                unique_filename=True
+                unique_filename=True,
+                format=upload_format,   # Fixes the extension issue (N/A)
+                access_mode="public"    # Signals that this file is for public access
             )
             
-            # 4. Return the secure URL
-            return response.get("secure_url")
+            # 4. Check for errors in the Cloudinary response
+            if "error" in response:
+                error_msg = response["error"].get("message", "Unknown Cloudinary error")
+                raise Exception(f"Cloudinary Error: {error_msg}")
+
+            # 5. Extract URL
+            secure_url = response.get("secure_url")
+            
+            # 6. Validate URL exists
+            if not secure_url:
+                raise Exception("Upload succeeded but no secure_url was returned.")
+
+            return secure_url
             
         except Exception as e:
             print(f"Cloudinary Upload Error: {e}")
             raise e
 
     try:
+        # Run the sync upload function in a thread
         return await asyncio.to_thread(_sync_upload_task)
     except Exception as e:
+        # This catches errors and sends a clear 500 to the frontend
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
