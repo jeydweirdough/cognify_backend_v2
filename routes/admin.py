@@ -1,14 +1,16 @@
 # routes/admin.py
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from typing import List
+from routes import auth
 from services.crud_services import create, read_query, delete, update, read_one
 from services.admin_service import get_verification_queue, get_system_statistics
 from core.security import allowed_users
 from database.enums import UserRole
-from database.models import PreRegisteredUserSchema
+from database.models import LoginSchema, PreRegisteredUserSchema
 from datetime import datetime
 import csv
 import io
+from firebase_admin import auth as firebase_auth
 
 # Ensure only admins can access these routes
 router = APIRouter(prefix="/admin", tags=["Admin Management"], dependencies=[Depends(allowed_users(["admin"]))])
@@ -109,3 +111,33 @@ async def bulk_whitelist_users(file: UploadFile = File(...)):
             skipped += 1
             
     return {"message": "Processed", "added": added, "skipped": skipped, "errors": errors}
+
+@router.put("/users/{uid}/password")
+async def admin_update_user_password(uid: str, data: LoginSchema):
+    """
+    Allows an admin to manually set a user's password.
+    Uses LoginSchema (email + password) to match system standards.
+    """
+    new_password = data.password.strip()
+    
+    if len(new_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="Password must be at least 8 characters long."
+        )
+
+    try:
+        # [FIX] Use the aliased firebase_auth SDK
+        firebase_auth.update_user(uid, password=new_password)
+        
+        # Optional: Revoke tokens to force re-login
+        firebase_auth.revoke_refresh_tokens(uid)
+        
+        return {"message": "Password updated successfully by admin"}
+        
+    except Exception as e:
+        print(f"Admin password update error for {uid}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update user password."
+        )

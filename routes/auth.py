@@ -284,20 +284,32 @@ async def refresh_token(
 @router.post("/logout")
 async def logout(
     response: Response, 
-    current_user: dict = Depends(verify_firebase_token),
+    # [FIX] Removed 'current_user' dependency to allow logout even if token is expired
     client_type: Optional[str] = Header(None)
 ):
-    """Logout with support for both web and mobile"""
+    """
+    Logout with support for both web and mobile.
+    Does not require authentication to ensure cookies are always cleared.
+    """
     try:
-        uid = current_user['uid']
-        auth.revoke_refresh_tokens(uid)
+        # If you wanted to revoke tokens, you would need the uid here.
+        # Since we removed the dependency to fix the loop, we focus on clearing cookies.
         
         # Only clear cookies for web clients
         if not (client_type and client_type.lower() == "mobile"):
-            response.delete_cookie("access_token")
-            response.delete_cookie("refresh_token")
+            # [FIX] Explicitly delete with same attributes to ensure removal
+            response.delete_cookie(key="access_token", httponly=True, secure=True, samesite="lax")
+            response.delete_cookie(key="refresh_token", httponly=True, secure=True, samesite="lax")
         
         return {"message": "Logged out successfully"}
+    
+    except Exception as e:
+        print(f"Logout error: {e}")
+        # Even if error, try to clear cookies
+        if not (client_type and client_type.lower() == "mobile"):
+            response.delete_cookie("access_token")
+            response.delete_cookie("refresh_token")
+        return {"message": "Logged out locally"}
     
     except Exception as e:
         print(f"Logout revocation failed: {e}")
@@ -324,3 +336,33 @@ async def check_permission(
         return {"has_permission": has_permission}
     
     return {"role_designation": role_designation}
+
+# [FIX] Added Password Update Route reusing LoginSchema
+@router.put("/password", summary="Update User Password")
+async def update_password(
+    data: LoginSchema, # Reuses email + password schema
+    current_user: dict = Depends(verify_firebase_token)
+):
+    """
+    Updates the password for the currently authenticated user.
+    """
+    uid = current_user['uid']
+    new_password = data.password.strip()
+    
+    if len(new_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="Password must be at least 8 characters long."
+        )
+
+    try:
+        # Use Firebase Admin SDK to update the password
+        auth.update_user(uid, password=new_password)
+        return {"message": "Password updated successfully"}
+        
+    except Exception as e:
+        print(f"Password update error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update password."
+        )

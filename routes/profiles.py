@@ -1,11 +1,5 @@
 # routes/profiles.py
-"""
-Profile viewing routes with role-based access control.
-Implements strict permission checks for data access.
-"""
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status, Query
-from typing import List, Dict, Any
-from core.security import verify_firebase_token
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from services.profile_service import (
     get_user_profile_with_role,
     get_student_related_data,
@@ -21,6 +15,8 @@ from services.crud_services import read_one, update
 from pydantic import BaseModel
 from datetime import datetime
 from services.upload_service import upload_file
+from fastapi import File, UploadFile
+from core.security import verify_firebase_token
 
 router = APIRouter(prefix="/profiles", tags=["User Profiles"])
 
@@ -40,7 +36,7 @@ class AdminUserUpdateRequest(ProfileUpdateRequest):
     Includes sensitive fields like role.
     """
     role: str | None = None
-    role_id: str | None = None  # [FIX] Added role_id to allow direct ID updates
+    role_id: str | None = None  # [FIX] Added to allow direct ID updates
     is_verified: bool | None = None
 
 # ========================================
@@ -83,7 +79,8 @@ async def update_my_profile(
     update_data["updated_at"] = datetime.utcnow()
     await update("user_profiles", user_id, update_data)
     
-    return {"message": "Profile updated successfully", "updated_fields": list(update_data.keys())}
+    # [FIX] Return the updated data so Frontend can update local state immediately
+    return update_data
 
 
 @router.get("/me/permissions", summary="Get my access permissions")
@@ -126,13 +123,13 @@ async def get_user_profile(
 
 
 # ========================================
-# ADMIN-SPECIFIC UPDATE (THE FIX)
+# ADMIN-SPECIFIC UPDATE
 # ========================================
 
 @router.put("/user/{target_id}", summary="Update another user's profile")
 async def update_target_user_profile(
     target_id: str,
-    updates: AdminUserUpdateRequest, # <--- MUST USE THIS SCHEMA
+    updates: AdminUserUpdateRequest, 
     current_user: dict = Depends(verify_firebase_token)
 ):
     """
@@ -144,16 +141,12 @@ async def update_target_user_profile(
     if requester_role != "admin":
         raise HTTPException(status_code=403, detail="Only admins can update other profiles.")
     
-    # [FIX] Use exclude_unset=True so that fields NOT in the payload are ignored,
-    # preventing them from overwriting DB data with None.
+    # [FIX] Use exclude_unset=True 
     update_data = updates.model_dump(exclude_unset=True)
     
-    print(f"DEBUG: Updating user {target_id} with data: {update_data}")
-
     # Handle Role Designation -> ID conversion
     if "role" in update_data and update_data["role"]:
         raw_role = update_data["role"].lower().strip()
-        # Map common terms to correct Enum values
         role_map = {
             "admin": "admin",
             "student": "student",
@@ -163,34 +156,27 @@ async def update_target_user_profile(
         }
         normalized_role = role_map.get(raw_role, raw_role)
         
-        # Look up the ID
         role_id = await get_role_id_by_designation(normalized_role)
         if not role_id:
-             # Try capitalizing
             role_id = await get_role_id_by_designation(normalized_role.capitalize())
             
         if not role_id:
             raise HTTPException(status_code=400, detail=f"Invalid role designation: {update_data['role']}")
             
         update_data["role_id"] = role_id
-        del update_data["role"] # Clean up, we store role_id in DB
+        del update_data["role"] 
     
-    # [FIX] Allow explicit role_id update if provided
     elif "role_id" in update_data:
-        # We assume if role_id is passed explicitly, it is valid or will be checked by DB constraints
         pass
 
     if not update_data:
-        # If update_data is empty here, it means the payload didn't match the schema keys
-        raise HTTPException(status_code=400, detail="No valid fields to update. Check payload keys (e.g. 'role' or 'role_id').")
+        raise HTTPException(status_code=400, detail="No fields to update.")
     
     update_data["updated_at"] = datetime.utcnow()
     await update("user_profiles", target_id, update_data)
     
-    return {
-        "message": f"User {target_id} updated successfully",
-        "updated_fields": list(update_data.keys())
-    }
+    # [FIX] Return updated data for Admin UI consistency
+    return update_data
 
 
 # ========================================
@@ -236,9 +222,8 @@ async def search_users(
         raise HTTPException(status_code=403, detail="Forbidden")
         
     if requester_role == "faculty_member":
-        role_filter = "student" # Faculty can only search students
+        role_filter = "student" 
         
-    # Logic to fetch users based on role
     if requester_role == "admin" and role_filter != "student":
         if role_filter == "faculty_member":
             users = await get_all_faculty_summary()
