@@ -520,18 +520,33 @@ async def generate_content(student_ids, faculty_ids):
         custom_list = CUSTOM_QUESTIONS.get(sub_info["title"], [])
         questions_created = [] # Keep track for assessment
         
-        if custom_list and all_comps_in_subject:
-            for item in custom_list:
+        if all_comps_in_subject:
+            for i in range(5):
                 target_comp = random.choice(all_comps_in_subject)
-                question_id = str(uuid.uuid4())
                 
+                if i < len(custom_list):
+                    item = custom_list[i]
+                    q_text = item["text"]
+                    q_choices = item["choices"]
+                    q_correct = item["correct"]
+                    q_bloom = item["bloom"]
+                    q_difficulty = item["difficulty"]
+                else:
+                    q_text = f"Generated Question {i+1} for {sub_info['title']}"
+                    distractors = [f"Incorrect Answer {j+1}" for j in range(3)]
+                    q_correct = "Correct Answer"
+                    q_choices = distractors + [q_correct]
+                    random.shuffle(q_choices)
+                    q_bloom = random.choice(["remembering", "understanding", "applying", "analyzing", "evaluating", "creating"])
+                    q_difficulty = random.choice(["Easy", "Moderate", "Hard"])
+
                 question_data = {
-                    "text": item["text"],
+                    "text": q_text,
                     "type": QuestionType.MULTIPLE_CHOICE,
-                    "choices": item["choices"],
-                    "correct_answers": item["correct"],
-                    "bloom_taxonomy": item["bloom"],
-                    "difficulty_level": item["difficulty"],
+                    "choices": q_choices,
+                    "correct_answers": q_correct,
+                    "bloom_taxonomy": q_bloom,
+                    "difficulty_level": q_difficulty,
                     "competency_id": target_comp["id"],
                     "is_verified": True, # Ensure verified so they can be used
                     "verified_at": get_utc_now(),
@@ -539,19 +554,17 @@ async def generate_content(student_ids, faculty_ids):
                     "created_by": random.choice(faculty_ids) if faculty_ids else "system",
                     "created_at": get_utc_now(),
                 }
-                # We need to manually insert with ID if we want to link it easily, 
-                # but create() generates ID. Let's let it generate and capture it.
+                
                 q_res = await create("questions", question_data)
                 
-                # Store local copy for assessment embedding
                 questions_created.append({
                     "question_id": q_res["id"],
-                    "text": item["text"],
+                    "text": q_text,
                     "type": QuestionType.MULTIPLE_CHOICE,
-                    "choices": item["choices"],
-                    "correct_answers": item["correct"],
-                    "bloom_taxonomy": item["bloom"],
-                    "difficulty_level": item["difficulty"],
+                    "choices": q_choices,
+                    "correct_answers": q_correct,
+                    "bloom_taxonomy": q_bloom,
+                    "difficulty_level": q_difficulty,
                     "competency_id": target_comp["id"],
                     "points": 1
                 })
@@ -593,8 +606,8 @@ async def generate_submissions(student_ids, assessment_id, assessment_data):
     """Simulates students taking the assessment."""
     questions = assessment_data["questions"]
 
-    # Randomly select 70% of students to have taken this assessment
-    taking_students = random.sample(student_ids, k=max(1, int(len(student_ids) * 0.7)))
+    # All students take the assessment
+    taking_students = student_ids
 
     for uid in taking_students:
         # Simulate student performance

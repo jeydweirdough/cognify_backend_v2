@@ -76,3 +76,54 @@ async def verify_assessment(assessment_id: str):
 async def delete_assessment(assessment_id: str):
     await delete("assessments", assessment_id)
     return {"message": "Deleted successfully"}
+
+# --- Submissions ---
+@router.get("/submissions", response_model=List[Dict[str, Any]])
+async def list_submissions(
+    user_id: Optional[str] = None,
+    assessment_id: Optional[str] = None,
+    module_id: Optional[str] = None,
+    subject_id: Optional[str] = None,
+):
+    filters = []
+    if user_id:
+        filters.append(("user_id", "==", user_id))
+    if assessment_id:
+        filters.append(("assessment_id", "==", assessment_id))
+    if module_id:
+        filters.append(("module_id", "==", module_id))
+    if subject_id:
+        filters.append(("subject_id", "==", subject_id))
+
+    items = await read_query("assessment_submissions", filters)
+    results: List[Dict[str, Any]] = []
+    for s in items:
+        data = s["data"]
+        data["id"] = s["id"]
+        results.append(data)
+    return results
+
+def _normalize_submission_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    data = dict(payload or {})
+    answers = data.get("answers") or []
+    if isinstance(answers, list) and "score" not in data:
+        try:
+            data["score"] = sum(1 for a in answers if a.get("is_correct"))
+        except Exception:
+            data["score"] = 0
+    data["created_at"] = datetime.utcnow()
+    return data
+
+@router.post("/submit", response_model=Dict[str, Any])
+async def submit_assessment(payload: Dict[str, Any] = Body(...)):
+    data = _normalize_submission_payload(payload)
+    doc_id = str(uuid.uuid4())
+    await create("assessment_submissions", data, doc_id=doc_id)
+    return {"id": doc_id, "message": "Submission recorded"}
+
+@router.post("/submissions", response_model=Dict[str, Any])
+async def create_submission(payload: Dict[str, Any] = Body(...)):
+    data = _normalize_submission_payload(payload)
+    doc_id = str(uuid.uuid4())
+    await create("assessment_submissions", data, doc_id=doc_id)
+    return {"id": doc_id, "message": "Submission recorded"}
