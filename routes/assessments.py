@@ -47,8 +47,14 @@ async def create_assessment(payload: Dict[str, Any] = Body(...)):
 @router.put("/{assessment_id}")
 async def update_assessment(assessment_id: str, payload: Dict[str, Any] = Body(...)):
     payload["updated_at"] = datetime.utcnow()
+    
+    # [FIX] Force unverified status on update
+    payload["is_verified"] = False
+    payload["verified_at"] = None
+    payload["verified_by"] = None
+
     await update("assessments", assessment_id, payload)
-    return {"id": assessment_id, "message": "Updated successfully"}
+    return {"id": assessment_id, "message": "Updated successfully and marked for re-verification"}
 
 # [FIX] Verify Endpoint
 @router.post("/{assessment_id}/verify")

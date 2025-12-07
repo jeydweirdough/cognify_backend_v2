@@ -65,6 +65,7 @@ async def get_module(module_id: str):
 async def create_module(payload: Dict[str, Any] = Body(...)):
     doc_id = str(uuid.uuid4())
     payload["created_at"] = datetime.utcnow()
+    # New modules always start unverified
     if "is_verified" not in payload:
         payload["is_verified"] = False 
         
@@ -74,8 +75,14 @@ async def create_module(payload: Dict[str, Any] = Body(...)):
 @router.put("/{module_id}")
 async def update_module(module_id: str, payload: Dict[str, Any] = Body(...)):
     payload["updated_at"] = datetime.utcnow()
+    
+    # [FIX] Force unverified status on update
+    payload["is_verified"] = False
+    payload["verified_at"] = None
+    payload["verified_by"] = None
+
     await update("modules", module_id, payload)
-    return {"message": "Module updated"}
+    return {"message": "Module updated and marked for re-verification"}
 
 @router.post("/{module_id}/verify")
 async def verify_module_endpoint(module_id: str):

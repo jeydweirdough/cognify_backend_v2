@@ -36,6 +36,11 @@ async def create_subject_endpoint(
 
 @router.put("/{subject_id}")
 async def update_subject_endpoint(subject_id: str, payload: Dict[str, Any] = Body(...)):
+    # [FIX] Any update must reset verification status
+    payload["is_verified"] = False
+    payload["verified_at"] = None
+    payload["verified_by"] = None
+    
     return await update_subject(subject_id, payload, requester_role="admin")
 
 # [NEW] Image Upload Endpoint for Subjects

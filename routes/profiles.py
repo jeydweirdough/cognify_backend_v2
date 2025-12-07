@@ -40,6 +40,7 @@ class AdminUserUpdateRequest(ProfileUpdateRequest):
     Includes sensitive fields like role.
     """
     role: str | None = None
+    role_id: str | None = None  # [FIX] Added role_id to allow direct ID updates
     is_verified: bool | None = None
 
 # ========================================
@@ -70,8 +71,8 @@ async def update_my_profile(
 ):
     user_id = current_user["uid"]
     
-    # Filter out None values
-    update_data = {k: v for k, v in updates.model_dump().items() if v is not None}
+    # [FIX] Use exclude_unset=True to only update fields actually sent
+    update_data = updates.model_dump(exclude_unset=True)
     
     if not update_data:
         raise HTTPException(
@@ -143,13 +144,14 @@ async def update_target_user_profile(
     if requester_role != "admin":
         raise HTTPException(status_code=403, detail="Only admins can update other profiles.")
     
-    # Debugging print to see what backend receives
-    print(f"DEBUG: Updating user {target_id} with data: {updates.model_dump()}")
-
-    update_data = {k: v for k, v in updates.model_dump().items() if v is not None}
+    # [FIX] Use exclude_unset=True so that fields NOT in the payload are ignored,
+    # preventing them from overwriting DB data with None.
+    update_data = updates.model_dump(exclude_unset=True)
     
-    # Handle Role Change
-    if "role" in update_data:
+    print(f"DEBUG: Updating user {target_id} with data: {update_data}")
+
+    # Handle Role Designation -> ID conversion
+    if "role" in update_data and update_data["role"]:
         raw_role = update_data["role"].lower().strip()
         # Map common terms to correct Enum values
         role_map = {
@@ -171,10 +173,16 @@ async def update_target_user_profile(
             raise HTTPException(status_code=400, detail=f"Invalid role designation: {update_data['role']}")
             
         update_data["role_id"] = role_id
-        del update_data["role"] # Clean up
+        del update_data["role"] # Clean up, we store role_id in DB
+    
+    # [FIX] Allow explicit role_id update if provided
+    elif "role_id" in update_data:
+        # We assume if role_id is passed explicitly, it is valid or will be checked by DB constraints
+        pass
 
     if not update_data:
-        raise HTTPException(status_code=400, detail="No fields to update. Check your payload keys.")
+        # If update_data is empty here, it means the payload didn't match the schema keys
+        raise HTTPException(status_code=400, detail="No valid fields to update. Check payload keys (e.g. 'role' or 'role_id').")
     
     update_data["updated_at"] = datetime.utcnow()
     await update("user_profiles", target_id, update_data)
