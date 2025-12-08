@@ -320,8 +320,6 @@ async def get_global_predictions() -> Dict:
     
     student_scores = {}
     subject_stats = {} # [FIX] Initialize subject stats container
-    pass_count = 0
-    fail_count = 0
     bloom_stats = {b.value.lower(): {"total": 0, "correct": 0} for b in BloomTaxonomy}
     
     for sub in submissions:
@@ -353,23 +351,43 @@ async def get_global_predictions() -> Dict:
                 if is_correct: bloom_stats[bloom]["correct"] += 1
         
     predictions = []
-    for uid, scores in student_scores.items():
-        avg = statistics.mean(scores)
-        is_passing = avg >= 75
-        if is_passing: pass_count += 1
-        else: fail_count += 1
-        
-        user = next((u for u in all_users if u["id"] == uid), {})
+    student_users = [u for u in all_users if u["data"].get("role_id") == "student"]
+    pass_count = 0
+    fail_count = 0
+    
+    for user in student_users:
+        uid = user["id"]
         udata = user.get("data", {})
+        scores = student_scores.get(uid, [])
         
+        if scores:
+            avg = statistics.mean(scores)
+            is_passing = avg >= 75
+            passing_prob = min(1.0, avg / 100.0)
+            if len(scores) > 3: # Keep logic
+                 passing_prob = min(1.0, passing_prob + 0.05)
+            
+            if is_passing:
+                pass_count += 1
+                risk = "Low"
+            else:
+                fail_count += 1
+                risk = "High"
+        else:
+            # New Student / No Data
+            avg = 0.0
+            is_passing = False
+            passing_prob = 0.0
+            risk = "Unknown"
+
         predictions.append({
             "student_id": uid,
             "first_name": udata.get("first_name"),
             "last_name": udata.get("last_name"),
             "predicted_to_pass": is_passing,
             "overall_score": round(avg, 1),
-            "risk_level": "Low" if is_passing else "High",
-            "passing_probability": round(avg/100, 2)
+            "risk_level": risk,
+            "passing_probability": round(passing_prob, 2)
         })
 
     # [FIX] Populate Global Subjects List
@@ -393,10 +411,10 @@ async def get_global_predictions() -> Dict:
         
     return {
         "summary": {
-            "total_students_predicted": len(student_scores),
+            "total_students_predicted": len(student_users),
             "count_predicted_to_pass": pass_count,
             "count_predicted_to_fail": fail_count,
-            "predicted_pass_rate": round((pass_count/len(student_scores)*100), 1) if student_scores else 0
+            "predicted_pass_rate": round((pass_count/len(student_users)*100), 1) if student_users else 0
         },
         "predictions": predictions,
         "subjects": global_subjects, # [FIX] No longer empty!
