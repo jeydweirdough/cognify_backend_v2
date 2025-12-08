@@ -343,3 +343,17 @@ async def my_nominations(current_user: dict = Depends(allowed_users(["faculty_me
         filters = [("nominated_by", "==", current_user["uid"])]
     nominations = await read_query("readiness_nominations", filters)
     return {"total": len(nominations), "nominations": nominations}
+
+@router.get("/next-action/{user_id}")
+async def get_student_recommendation(
+    user_id: str,
+    current_user: dict = Depends(allowed_users(["student"]))
+):
+    """
+    Returns the next recommended assessment based on the algorithm:
+    Pre-Assessment -> Diagnostic -> Post-Assessment
+    """
+    if current_user["uid"] != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+        
+    return await get_student_next_action(user_id)
