@@ -6,7 +6,6 @@ class UserRole(str, Enum):
     FACULTY = "faculty_member" # Updated from TEACHER
 
 class AssessmentType(str, Enum):
-    PRE_ASSESSMENT = "pre-assessment"
     QUIZ = "quiz"
     POST_ASSESSMENT = "post-assessment"
     DIAGNOSTIC = "diagnostic"

@@ -7,8 +7,17 @@ from datetime import datetime, timezone, timedelta
 from faker import Faker
 from firebase_admin import auth
 
-# Add project root to path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# ---------------------------------------------------------
+# PATH & DIRECTORY SETUP
+# ---------------------------------------------------------
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.abspath(os.path.join(script_dir, ".."))
+
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+os.chdir(project_root)
+# ---------------------------------------------------------
 
 from core.firebase import db
 from services.crud_services import create, read_query, read_one, update
@@ -19,8 +28,8 @@ from database.enums import (
 
 fake = Faker()
 TEST_PREFIX = "test_auto_"
-NUM_STUDENTS = 10
-NUM_FACULTY = 3
+NUM_STUDENTS = 20
+NUM_FACULTY = 4
 DEFAULT_PASSWORD = "TestPassword123!"
 USER_COLLECTION = "user_profiles"
 
@@ -36,6 +45,7 @@ SUBJECT_DATA = [
             {"title": "Humanistic & Existential", "comps": ["Apply Maslow’s hierarchy", "Evaluate Rogers’ person-centered approach"]},
             {"title": "Behavioral Learning", "comps": ["Differentiate classical vs operant conditioning", "Analyze Bandura’s modeling"]},
             {"title": "Trait & Cognitive Theories", "comps": ["Assess Big Five traits", "Apply Kelly’s personal construct theory"]},
+            {"title": "Biological Perspectives", "comps": ["Evaluate genetic influences", "Analyze evolutionary psychology"]},
         ]
     },
     {
@@ -48,6 +58,7 @@ SUBJECT_DATA = [
             {"title": "Personality Disorders", "comps": ["Differentiate Cluster A, B, and C", "Apply diagnostic criteria"]},
             {"title": "Neurodevelopmental Disorders", "comps": ["Identify ADHD and Autism spectrum", "Evaluate learning disorders"]},
             {"title": "Trauma & Stressors", "comps": ["Analyze PTSD triggers", "Evaluate acute stress disorder"]},
+            {"title": "Therapeutic Interventions", "comps": ["Compare CBT and DBT", "Evaluate psychopharmacology"]},
         ]
     },
     {
@@ -60,6 +71,7 @@ SUBJECT_DATA = [
             {"title": "Training & Development", "comps": ["Design training programs", "Evaluate transfer of training"]},
             {"title": "Work Motivation", "comps": ["Apply ERG and Equity theories", "Analyze job satisfaction factors"]},
             {"title": "Organizational Culture", "comps": ["Assess leadership styles", "Analyze team dynamics"]},
+            {"title": "Organizational Change", "comps": ["Manage resistance to change", "Evaluate OD interventions"]},
         ]
     },
     {
@@ -72,6 +84,7 @@ SUBJECT_DATA = [
             {"title": "Intelligence Testing", "comps": ["Interpret WAIS-IV scores", "Analyze theories of intelligence"]},
             {"title": "Personality Assessment", "comps": ["Interpret MMPI-2 profiles", "Evaluate projective tests"]},
             {"title": "Clinical Assessment", "comps": ["Conduct intake interviews", "Integrate assessment data"]},
+            {"title": "Ethical Guidelines", "comps": ["Apply code of ethics", "Evaluate cultural fairness"]},
         ]
     },
 ]
@@ -85,9 +98,12 @@ async def create_auth_user(email, role_label):
             old_user = auth.get_user_by_email(email)
             auth.delete_user(old_user.uid)
         except: pass
+        
         user = auth.create_user(
-            email=email, password=DEFAULT_PASSWORD,
-            display_name=f"{role_label.capitalize()} User", email_verified=True,
+            email=email, 
+            password=DEFAULT_PASSWORD,
+            display_name=f"{role_label.capitalize()} User", 
+            email_verified=True,
         )
         return user.uid
     except Exception as e:
@@ -96,16 +112,24 @@ async def create_auth_user(email, role_label):
 
 async def setup_roles():
     print("🔑 Setting up Roles...")
-    roles = {"admin": "admin", "student": "student", "faculty": "faculty_member"}
+    roles = {"admin": "admin", "student": "student", "faculty": "faculty_member"} 
+    role_ids = {}
     for key, designation in roles.items():
-        if not await read_one("roles", designation):
+        existing = await read_one("roles", designation)
+        if not existing:
             await create("roles", {"designation": designation}, doc_id=designation)
-    return roles
+        role_ids[key] = designation
+    return role_ids
 
 async def create_whitelist_entry(email, role):
     existing = await read_query("whitelist", [("email", "==", email)])
     if not existing:
-        await create("whitelist", {"email": email, "assigned_role": role, "is_registered": True, "created_at": get_utc_now()})
+        await create("whitelist", {
+            "email": email, 
+            "assigned_role": role, 
+            "is_registered": True, 
+            "created_at": get_utc_now()
+        })
 
 async def reset_database():
     print("\n🧹 Resetting Database...")
@@ -122,7 +146,7 @@ async def generate_users(role_ids):
     print("\n👥 Generating Users...")
     faculty_ids, student_ids = [], []
 
-    # Admin
+    # 1. Admin
     admin_id = await create_auth_user(f"{TEST_PREFIX}admin@cvsu.edu.ph", "admin")
     if admin_id:
         await create(USER_COLLECTION, {
@@ -132,7 +156,7 @@ async def generate_users(role_ids):
         }, doc_id=admin_id)
         await create_whitelist_entry(f"{TEST_PREFIX}admin@cvsu.edu.ph", UserRole.ADMIN)
 
-    # Faculty
+    # 2. Faculty
     for i in range(NUM_FACULTY):
         email = f"{TEST_PREFIX}faculty_{i}@cvsu.edu.ph"
         uid = await create_auth_user(email, "faculty")
@@ -143,31 +167,36 @@ async def generate_users(role_ids):
                 "created_at": get_utc_now()
             }, doc_id=uid)
             faculty_ids.append(uid)
-            await create_whitelist_entry(email, UserRole.FACULTY)
+            await create_whitelist_entry(email, "faculty_member")
 
-    # Students
+    # 3. Students
     for i in range(NUM_STUDENTS):
         email = f"{TEST_PREFIX}student_{i}@cvsu.edu.ph"
         uid = await create_auth_user(email, "student")
         if uid:
+            is_active = i < (NUM_STUDENTS - 2) 
+            
             student_info = {
-                "personal_readiness": "VERY_LOW", 
+                "personal_readiness": random.choice([e.value for e in PersonalReadinessLevel]) if is_active else None,
                 "progress_report": [],
-                "timeliness": random.randint(60, 100),
+                "timeliness": random.randint(60, 100) if is_active else 0,
                 "confident_subject": [], 
                 "recommended_study_modules": [], 
-                "behavior_profile": {"average_session_length": 0, "learning_pace": "Standard", "preferred_study_time": "Any", "interruption_frequency": "Low"},
+                "behavior_profile": {"average_session_length": 45, "learning_pace": "Standard", "preferred_study_time": "Night", "interruption_frequency": "Low"},
                 "competency_performance": []
             }
             await create(USER_COLLECTION, {
                 "email": email, "first_name": fake.first_name(), "last_name": fake.last_name(), "username": f"student_{i}",
-                "role_id": role_ids["student"], "role": "student", "is_verified": True, "is_active": True, "is_registered": True,
+                "role_id": role_ids["student"], "role": "student", 
+                "is_verified": is_active, "is_active": is_active, "is_registered": is_active,
                 "profile_picture": None,
                 "student_info": student_info,
                 "created_at": get_utc_now()
             }, doc_id=uid)
-            student_ids.append(uid)
-            await create_whitelist_entry(email, UserRole.STUDENT)
+            
+            if is_active:
+                student_ids.append(uid)
+                await create_whitelist_entry(email, UserRole.STUDENT)
 
     return student_ids, faculty_ids
 
@@ -178,7 +207,6 @@ async def generate_content(faculty_ids):
     DUMMY_PDF = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
     bloom_levels = [b.value for b in BloomTaxonomy]
 
-    # --- PROCESS EACH SUBJECT ---
     for sub_info in SUBJECT_DATA:
         # 1. Create Subject
         topics_data = []
@@ -190,7 +218,7 @@ async def generate_content(faculty_ids):
                     "target_bloom_level": "understanding", "target_difficulty": "moderate", "allocated_items": 5
                 })
             topics_data.append({
-                "id": str(uuid.uuid4()), "title": topic["title"], "weight_percentage": 20, "competencies": comps_data
+                "id": str(uuid.uuid4()), "title": topic["title"], "weight_percentage": 16.66, "competencies": comps_data
             })
 
         sub_res = await create("subjects", {
@@ -202,98 +230,187 @@ async def generate_content(faculty_ids):
         })
         subject_id = sub_res["id"]
         
-        # --- 2. GENERATE DIAGNOSTIC (5 Questions PER SUBJECT) ---
-        # [FIX] Creates a specific Diagnostic Assessment for THIS subject
-        diag_q = []
+        # 2. DIAGNOSTIC ASSESSMENT
+        diag_q_list = []
         for i in range(5):
-            comp_txt = sub_info["topics"][i % 5]["comps"][0]
+            comp_txt = sub_info["topics"][i % 6]["comps"][0]
             q_res = await create("questions", {
-                "text": f"Diagnostic: A question about {comp_txt}?",
+                "text": f"Diagnostic Q{i+1}: What is the core concept of {comp_txt}?",
                 "type": QuestionType.MULTIPLE_CHOICE,
-                "choices": ["Correct Answer", "Distractor A", "Distractor B", "Distractor C"],
+                "choices": ["Correct Answer", "A", "B", "C"],
                 "correct_answers": "Correct Answer",
-                "bloom_taxonomy": random.choice(bloom_levels), "difficulty_level": DifficultyLevel.MODERATE,
+                "bloom_taxonomy": BloomTaxonomy.REMEMBERING.value, # Diagnostic is basic recall
+                "difficulty_level": DifficultyLevel.MODERATE,
                 "competency_id": "comp_" + uuid.uuid4().hex[:6],
+                "subject_id": subject_id,
                 "is_verified": True, "points": 1,
                 "tags": ["Diagnostic", sub_info['title']], 
                 "created_at": get_utc_now()
             })
-            diag_q.append({
-                "question_id": q_res["id"], "text": f"Diagnostic Q", 
-                "choices": ["Correct Answer","Distractor A","Distractor B","Distractor C"], 
-                "correct_answers": "Correct Answer", "points": 1, "subject": sub_info["title"]
+            diag_q_list.append({
+                "question_id": q_res["id"], "text": "Diagnostic Q", 
+                "choices": ["Correct","A","B","C"], "correct_answers": "Correct", "points": 1, "subject": sub_info["title"]
             })
 
-        # Create the Diagnostic Assessment Linked to THIS Subject
         diag_res = await create("assessments", {
             "title": f"Diagnostic - {sub_info['title']}",
-            "type": AssessmentType.DIAGNOSTIC,
+            "type": AssessmentType.DIAGNOSTIC, 
             "subject_id": subject_id, 
             "description": f"Baseline assessment for {sub_info['title']}",
-            "questions": diag_q,
+            "questions": diag_q_list,
             "total_items": 5,
             "is_verified": True,
-            "created_at": get_utc_now()
+            "created_at": get_utc_now(),
+            "bloom_levels": [BloomTaxonomy.REMEMBERING.value, BloomTaxonomy.UNDERSTANDING.value] # <--- ADDED: Diagnostic is foundational
         })
         
         subject_structure = {"id": subject_id, "modules": [], "diagnostic_id": diag_res["id"], "post_assessment": None}
 
-        # --- 3. MODULES & QUIZZES ---
-        for topic in sub_info["topics"]:
-            input_type = random.choice(["pdf", "text"])
-            mod_content = f"# {topic['title']}\n\n## Content\nLearn about **{topic['title']}**." if input_type == "text" else None
+        # 3. MODULES & QUIZZES
+        for idx, topic in enumerate(sub_info["topics"]):
+            input_type = "pdf" if idx < 3 else "text"
+            
+            # Module Bloom Level (Random, but used for Quiz)
+            module_bloom_level = random.choice([
+                BloomTaxonomy.UNDERSTANDING.value, 
+                BloomTaxonomy.APPLYING.value, 
+                BloomTaxonomy.ANALYZING.value
+            ])
+            
+            # Rich Subject-Specific Content
+            if input_type == "text":
+                topic_title = topic['title']
+                learning_objs = "\n".join([f"* {c}" for c in topic['comps']])
+                
+                mod_content = f"""# {topic_title}
+
+## 1. Introduction to {topic_title}
+This module explores **{topic_title}** within the domain of **{sub_info['title']}**. It is critical for the Psychometrician licensure examination as it covers fundamental theories and practical applications.
+
+## 2. Learning Objectives
+By the end of this module, you should be able to:
+{learning_objs}
+
+## 3. Core Concepts and Analysis
+In studying {topic_title}, we examine the underlying mechanisms that drive behavior. 
+
+### Key Principles:
+* **Theoretical Foundation:** Understanding the history and development of these concepts.
+* **Practical Application:** How to apply {topic_title} in clinical or industrial settings.
+* **Critical Analysis:** Evaluating the strengths and limitations of current models.
+
+## 4. Summary
+To summarize, mastering {topic_title} requires a deep understanding of its components and how they interact with other areas of {sub_info['title']}.
+
+> **Study Tip:** Focus on the competencies listed above for your upcoming quiz.
+"""
+            else:
+                mod_content = None
             
             mod_res = await create("modules", {
-                "title": f"Module: {topic['title']}", "subject_id": subject_id, "input_type": input_type,
-                "content": mod_content, "material_url": DUMMY_PDF if input_type == "pdf" else None,
-                "bloom_levels": [random.choice(bloom_levels)], "purpose": "Educational",
-                "is_verified": True, "author": "Dr. " + fake.last_name(),
+                "title": f"Module {idx+1}: {topic['title']}", 
+                "subject_id": subject_id, 
+                "subject_title": sub_info["title"], 
+                "input_type": input_type,
+                "content": mod_content, 
+                "material_url": DUMMY_PDF if input_type == "pdf" else None,
+                "bloom_levels": [module_bloom_level], # Storing the module's primary bloom level
+                "purpose": "Educational",
+                "is_verified": True, 
+                "author": "Faculty Department",
                 "created_by": random.choice(faculty_ids) if faculty_ids else "system",
                 "created_at": get_utc_now(), "deleted": False
             })
             module_id = mod_res["id"]
 
-            # Quiz Questions (5 per Module)
+            # Quiz Questions (Inherits Module Bloom Level)
             quiz_questions = []
             for k in range(5):
                 comp = topic["comps"][k % len(topic["comps"])]
                 q_res = await create("questions", {
-                    "text": f"Quiz Q{k+1}: {comp}?", "type": QuestionType.MULTIPLE_CHOICE,
-                    "choices": ["Option A", "Option B", "Option C", "Option D"], "correct_answers": "Option A",
-                    "bloom_taxonomy": random.choice(bloom_levels), "difficulty_level": "moderate",
+                    "text": f"Quiz Question: Regarding {topic['title']}, how would you {comp.lower()}?", 
+                    "type": QuestionType.MULTIPLE_CHOICE,
+                    "choices": ["Option A", "Option B", "Option C", "Option D"], 
+                    "correct_answers": "Option A",
+                    "bloom_taxonomy": module_bloom_level, # Question matches module
+                    "difficulty_level": DifficultyLevel.MODERATE,
+                    "competency_id": "comp_" + uuid.uuid4().hex[:6],
+                    "subject_id": subject_id, "module_id": module_id,
                     "is_verified": True, "created_at": get_utc_now()
                 })
-                quiz_questions.append({"question_id": q_res["id"], "text": f"Quiz Q", "choices": ["Option A", "Option B", "Option C", "Option D"], "correct_answers": "Option A", "points": 1, "subject": sub_info["title"]})
+                quiz_questions.append({"question_id": q_res["id"], "text": "Quiz Q", "choices": ["A","B","C","D"], "correct_answers": "A", "points": 1})
 
-            # Create Quiz
             quiz_res = await create("assessments", {
                 "title": f"Quiz: {topic['title']}", "type": AssessmentType.QUIZ,
                 "subject_id": subject_id, "module_id": module_id, "questions": quiz_questions,
-                "total_items": len(quiz_questions), "is_verified": True, "created_at": get_utc_now()
+                "total_items": 5, 
+                "is_verified": True, 
+                "created_at": get_utc_now(),
+                "bloom_levels": [module_bloom_level] # <--- ADDED: Quiz inherits module's bloom level
             })
             
             subject_structure["modules"].append({"id": module_id, "quiz_id": quiz_res["id"]})
 
-        # --- 4. POST-ASSESSMENT ---
-        if subject_structure["modules"]:
-            post_questions = []
-            for _ in range(20): 
-                 q_res = await create("questions", {
-                    "text": f"Final Exam Question for {sub_info['title']}?", "type": QuestionType.MULTIPLE_CHOICE,
-                    "choices": ["A", "B", "C", "D"], "correct_answers": "A",
-                    "bloom_taxonomy": "analyzing", "difficulty_level": "difficult",
-                    "is_verified": True, "created_at": get_utc_now()
-                })
-                 post_questions.append({"question_id": q_res["id"], "text": "Q", "choices": ["A", "B", "C", "D"], "correct_answers": "A", "subject": sub_info["title"]})
-
-            pa_res = await create("assessments", {
-                "title": f"{sub_info['title']} - Final Exam", "type": AssessmentType.POST_ASSESSMENT,
-                "subject_id": subject_id, "description": "Comprehensive exam.",
-                "questions": post_questions, "total_items": 20,
+        # 4. POST-ASSESSMENT (Higher Order)
+        post_q_list = []
+        for j in range(10): 
+             topic_ctx = random.choice(sub_info["topics"])["title"]
+             q_res = await create("questions", {
+                "text": f"Final Exam: Comprehensive analysis of {topic_ctx} in {sub_info['title']}.", 
+                "type": QuestionType.MULTIPLE_CHOICE,
+                "choices": ["Theory A is correct", "Theory B applies here", "Both A and B", "Neither A nor B"], 
+                "correct_answers": "Theory A is correct",
+                "bloom_taxonomy": BloomTaxonomy.ANALYZING.value, # Question is Analysis/Evaluation
+                "difficulty_level": DifficultyLevel.DIFFICULT,
+                "competency_id": "comp_" + uuid.uuid4().hex[:6],
+                "subject_id": subject_id,
                 "is_verified": True, "created_at": get_utc_now()
             })
-            subject_structure["post_assessment"] = pa_res["id"]
+             post_q_list.append({"question_id": q_res["id"], "text": "Q", "choices": ["A","B","C","D"], "correct_answers": "A", "points": 1, "subject": sub_info["title"]})
+
+        pa_res = await create("assessments", {
+            "title": f"{sub_info['title']} - Final Exam", 
+            "type": AssessmentType.POST_ASSESSMENT,
+            "subject_id": subject_id, 
+            "description": "Comprehensive exam covering all modules.",
+            "questions": post_q_list, "total_items": 10, 
+            "is_verified": True,
+            "created_at": get_utc_now(),
+            "bloom_levels": [BloomTaxonomy.ANALYZING.value, BloomTaxonomy.EVALUATING.value] # <--- ADDED: Post-Assessment is high order
+        })
+        subject_structure["post_assessment"] = pa_res["id"]
         
+        # 5. GENERATE PENDING MATERIALS
+        print(f"   - Generating pending materials for {sub_info['title']}...")
+        
+        for p in range(3):
+            p_content = f"# Draft: Advanced {sub_info['title']} Concept\n\n## Overview\nThis content is currently under review by the department head. It covers advanced applications of **{sub_info['topics'][0]['title']}**.\n\n## Objectives\n* Critical analysis\n* Theoretical application"
+            
+            await create("modules", {
+                "title": f"Pending Module {p+1}: {sub_info['title']} Advanced", 
+                "subject_id": subject_id, 
+                "subject_title": sub_info["title"], 
+                "input_type": "text",
+                "content": p_content, 
+                "bloom_levels": [BloomTaxonomy.CREATING.value], # Pending module is creating level
+                "purpose": "Supplemental",
+                "is_verified": False, # <--- PENDING
+                "author": "Dr. Pending",
+                "created_by": random.choice(faculty_ids) if faculty_ids else "system",
+                "created_at": get_utc_now(), "deleted": False
+            })
+            
+            await create("assessments", {
+                "title": f"Proposed Quiz {p+1}", 
+                "type": AssessmentType.QUIZ,
+                "subject_id": subject_id, 
+                "questions": [],
+                "total_items": 0, 
+                "is_verified": False, # <--- PENDING
+                "created_at": get_utc_now(),
+                "bloom_levels": [BloomTaxonomy.REMEMBERING.value] # Pending Quiz
+            })
+
         content_map.append(subject_structure)
 
     return content_map
@@ -303,24 +420,22 @@ async def simulate_student_activity(student_ids, content_map):
     
     for idx, uid in enumerate(student_ids):
         persona = "newbie"
-        if idx >= 4 and idx <= 6: persona = "learner"
-        if idx > 6: persona = "master"
+        if idx >= 7 and idx <= 13: persona = "learner"
+        if idx > 13: persona = "master"
         
         if persona == "newbie": continue 
 
-        # Learner & Master: Take ALL Subject Diagnostics
-        # [FIX] This updates analytics for EACH subject individually
+        # Learner & Master: Take Diagnostics
         for sub in content_map:
             await create("assessment_submissions", {
                 "user_id": uid, "assessment_id": sub["diagnostic_id"], "subject_id": sub["id"],
-                "score": 4 if persona == "learner" else 5, "total_items": 5,
+                "score": 4 if persona == "learner" else 5, "total_items": 5, "percentage": 80 if persona == "learner" else 100,
                 "created_at": get_utc_now() - timedelta(days=60)
             })
         
         progress_reports = []
         best_subject_id = None
         
-        # Modules & Quizzes
         for sub in content_map:
             if persona == "learner" and random.random() > 0.6: continue 
 
@@ -337,7 +452,7 @@ async def simulate_student_activity(student_ids, content_map):
                 
                 await create("assessment_submissions", {
                     "user_id": uid, "assessment_id": mod["quiz_id"], "module_id": mod["id"], "subject_id": sub["id"],
-                    "score": 5, "total_items": 5, "created_at": get_utc_now()
+                    "score": 5, "total_items": 5, "percentage": 100, "created_at": get_utc_now()
                 })
                 assess_sum += 100
             
@@ -355,6 +470,7 @@ async def simulate_student_activity(student_ids, content_map):
         
         await update(USER_COLLECTION, uid, {
             "student_info": {
+                "user_id": uid,
                 "personal_readiness": "HIGH" if persona == "master" else "MODERATE",
                 "progress_report": progress_reports,
                 "timeliness": 90,
@@ -362,11 +478,26 @@ async def simulate_student_activity(student_ids, content_map):
                 "recommended_study_modules": [],
                 "behavior_profile": {"average_session_length": 30, "learning_pace": "Standard"}
             },
-            "personal_readiness": "HIGH" if persona == "master" else "MODERATE",
             "has_taken_diagnostic": True 
         })
 
     print("   ✅ Simulation Complete")
+
+async def create_pending_whitelists():
+    print("\n📝 Creating 5 Pending Whitelists...")
+    pending_emails = [
+        f"pending_prof_{i}@cvsu.edu.ph" for i in range(1, 4)
+    ] + [f"pending_student_{i}@cvsu.edu.ph" for i in range(1, 3)]
+    
+    for email in pending_emails:
+        role = "faculty_member" if "prof" in email else "student"
+        await create("whitelist", {
+            "email": email, 
+            "assigned_role": role, 
+            "is_registered": False, # <--- PENDING
+            "created_at": get_utc_now()
+        })
+    print(f"   Created {len(pending_emails)} whitelist entries.")
 
 async def main():
     print("🚀 STARTING REALISTIC SCENARIO POPULATION")
@@ -376,9 +507,11 @@ async def main():
     student_ids, faculty_ids = await generate_users(role_ids)
     content_map = await generate_content(faculty_ids)
     await simulate_student_activity(student_ids, content_map)
+    await create_pending_whitelists()
+    
     print("\n✨ POPULATION FINISHED!")
     print(f"   - Newbie: {TEST_PREFIX}student_0@cvsu.edu.ph")
-    print(f"   - Master: {TEST_PREFIX}student_9@cvsu.edu.ph")
+    print(f"   - Master: {TEST_PREFIX}student_19@cvsu.edu.ph")
 
 if __name__ == "__main__":
     asyncio.run(main())
